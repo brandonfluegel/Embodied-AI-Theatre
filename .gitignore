@@ -1,0 +1,43 @@
+# ── Visual Studio IDE ──────────────────────────────────────────────
+.vs/
+*.slnx
+*.sln
+slnx.sqlite
+ProjectSettings.json
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+
+# ── VS Code workspace cache ────────────────────────────────────────
+# (keep .vscode/ if you want to share launch/task configs — remove
+#  the line below if you add a .vscode/settings.json you want tracked)
+.vscode/
+
+# ── Python ────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# ── Arduino / PlatformIO build output ─────────────────────────────
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# ── Operating system noise ─────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# ── Logs and temp files ────────────────────────────────────────────
+*.log
+*.tmp
+*.temp

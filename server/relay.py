@@ -27,6 +27,10 @@ import websockets
 # Leave as None to auto-detect the first available serial port.
 SERIAL_PORT: str | None = None
 
+# Set to True to run without the ESP32 plugged in.
+# Servo commands will be printed to the terminal instead of sent over serial.
+MOCK_MODE: bool = True
+
 # Must match the baud rate defined in the Arduino sketch.
 BAUD_RATE: int = 115200
 
@@ -100,8 +104,11 @@ async def handle_client(
                 angle = max(0, min(180, angle))   # clamp instead of dropping
 
                 line = f"S{channel}:{angle}\n"
-                ser.write(line.encode("ascii"))
-                print(f"[serial] {line.strip()}")
+                if ser:
+                    ser.write(line.encode("ascii"))
+                    print(f"[serial] {line.strip()}")
+                else:
+                    print(f"[MOCK STREAM] Received from Browser: {raw} -> Outbound: {line.strip()}")
 
     except websockets.exceptions.ConnectionClosedOK:
         pass
@@ -114,8 +121,12 @@ async def handle_client(
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 async def main() -> None:
-    port_name = SERIAL_PORT or find_serial_port()
-    ser = open_serial(port_name)
+    if MOCK_MODE:
+        print("[relay] MOCK MODE — no serial hardware required.")
+        ser = None
+    else:
+        port_name = SERIAL_PORT or find_serial_port()
+        ser = open_serial(port_name)
 
     async def handler(ws: websockets.ServerConnection) -> None:
         await handle_client(ws, ser)

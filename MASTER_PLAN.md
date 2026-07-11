@@ -65,55 +65,96 @@ This approach keeps all hardware completely out of sight and adds no visible mas
 
 ## 4. Embodied Speech & Interactive Conversation Loop
 
-### Autonomous Orchestration
+### Stage 1 — Real-Time Text Generation Hook
 
-A Tampermonkey browser userscript runs continuously on the shape-models.com tone playground. It manages the full turn-taking loop without any manual input:
+The userscript does not track mouse clicks or raw slider positions to trigger speech. Instead, it deploys a `MutationObserver` targeted directly at the generation output box at the bottom of the shape-models.com playground. The observer fires the exact millisecond new tokens begin streaming onto the screen after the **Run with this tone** button is pressed.
 
-1. Wall-E's AI tab finishes streaming a text response
-2. The userscript reads the completed text and passes it to the browser's built-in Web Speech API
-3. Wall-E's voice plays aloud through the ThinkPad speakers
-4. While audio plays, the userscript streams high-frequency servo commands to create speech-synchronized head motion
-5. When Wall-E finishes speaking, the userscript automatically copies his response text
-6. It pastes that text into EVE's input field and triggers her reply
-7. EVE streams her response, speaks, moves, and hands the conversation back to Wall-E
-8. The cycle repeats indefinitely
+A debounce timer (850 ms) resets on every incoming chunk. When the page goes quiet for 850 ms — meaning the stream has genuinely ended and not merely paused — the full text block is extracted, stripped of UI chrome (model name, "IDLE" label, "OUTPUT" heading), and passed downstream as a clean prose string.
 
-### Cadence Bobbing
+### Stage 2 — Web Speech Text-to-Speech
 
-While a character is speaking, the userscript sends positional updates to `ws://localhost:8765` every **30 milliseconds**. These micro-adjustments oscillate the head servo between a small positive and negative offset around a center angle, creating a natural nodding rhythm that mimics syllable stress. The oscillation amplitude and speed are controlled by the active tone dial values.
+The cleaned text string is immediately handed to the browser's native `window.speechSynthesis` API — no external service, no API key, no network round-trip. A local US-English voice is selected automatically.
 
-### Conversation Handoff Summary
+Two dial parameters shape the utterance in real time before each sentence is spoken:
+
+| Dial | Voice effect | Range |
+|---|---|---|
+| ENERGY | Speech rate | 0.75 (slow) → 1.40 (rapid) |
+| WARMTH | Pitch | 0.85 (low) → 1.15 (warm) |
+
+The interaction operates as a **closed-loop automated theatre**. When the active utterance fires its `onend` event, the userscript copies the completed text block, programmatically inputs it into the opposing character's prompt window, and triggers the next generation phase. The debate alternates between Wall-E and EVE indefinitely without any manual user action.
+
+### Stage 3 — Syllable-Synchronized Mechanical Bursts
+
+Physical movement is dynamically coupled to active speech synthesis. The moment `utterance.onstart` fires, a high-frequency animation loop begins inside the userscript. On every tick it sends an oscillating positional command to `ws://localhost:8765` on **Channel 0** (Wall-E's head servo), alternating between **100°** and **80°** around the 90° neutral center.
+
+The tick interval is computed from the live ENERGY and VERBOSITY dial values:
 
 ```
-Wall-E speaks → head bobs → speech ends
-    → userscript copies Wall-E's text
-    → pastes into EVE's input → EVE generates reply
-    → EVE speaks → head tilts → speech ends
-    → userscript copies EVE's text
-    → pastes into Wall-E's input → loop repeats
+driver = (ENERGY + VERBOSITY) / 2        // 0-100
+interval_ms = 200 - (driver / 100) × 150  // 200 ms (slow) → 50 ms (fast)
+```
+
+The moment `utterance.onend` fires, `clearInterval` terminates the loop instantly and a final `S0:90` command snaps Wall-E's head back to the neutral resting position. No servo motion persists between spoken turns.
+
+### Conversation Handoff Flow
+
+```
+[shape-models.com generates text]
+    ↓  MutationObserver fires on output box
+    ↓  850 ms debounce confirms stream end
+    ↓  text stripped of UI labels
+    ↓
+[window.speechSynthesis.speak(utterance)]
+    ↓  utterance.onstart  → setInterval head-bob loop starts (ch 0)
+    ↓  utterance.onend   → clearInterval, S0:90 sent, head returns to rest
+    ↓
+[userscript copies text → pastes into opposing character's prompt]
+    ↓  triggers next generation phase
+    ↓
+[loop repeats indefinitely]
 ```
 
 ---
 
-## 5. Dynamic Tone Dials & Hybrid Master Control
+## 5. Multimodal Dial Modifiers
 
-### The Six Tone Parameters
+### The Temperature Slider Is Explicitly Ignored
 
-The shape-models.com tone playground exposes six dial parameters that the system reads and acts on simultaneously. Each parameter affects language output, voice output, and servo behavior at the same time.
+The shape-models.com playground has a **Temperature** slider at the top of the page above the six tone dials. The userscript's DOM scoping logic (`getToneDialsSection`) finds the tightest container that holds only the six named dials. The Temperature slider lives outside this section and is structurally unreachable. An additional hard-exclusion guard inside `findDialName` returns `null` the moment the word "TEMPERATURE" appears in any ancestor within 4 DOM levels of a slider element.
 
-| Dial | Character mapped | Effect on language | Effect on voice | Effect on servos |
-|---|---|---|---|---|
-| WARMTH | Wall-E ch 0 | Warmer, more personal phrasing | Softer, slower delivery | Slower, rounder head bobs |
-| VERBOSITY | Wall-E ch 1 | Longer or shorter responses | Longer or shorter pauses | Wider or tighter waist twist range |
-| ENERGY | Wall-E ch 2 | More exclamatory vs. composed | Faster rate, higher pitch | High-frequency micro-jitters on arm |
-| DIRECTNESS | EVE ch 3 | Blunt vs. hedged statements | More clipped cadence | Sharper, faster head tilts |
-| CONCRETENESS | EVE ch 4 | Abstract vs. specific examples | Even, measured delivery | Slow, smooth body-lean transitions |
-| STRUCTURE | EVE ch 5 | Flowing prose vs. bullet-point | Longer sentence rhythm | Sustained arm hold vs. quick retract |
+### The Six Dials as Global Performance Modifiers
 
-### Multimodal Translation Logic
+The six tone dials do **not** directly command individual servo positions in real time. They function as persistent parameter stores that shape the character's physical and vocal performance. Every time a dial moves, two things happen:
 
-- **High urgency / high energy:** spoken audio rate increases, micro-jitter commands fire at maximum frequency, servo transitions use hard linear interpolation
-- **Low urgency / low warmth:** voice drops to a slower cadence, servo commands use a low-pass filter so transitions are gradual and smooth
+1. The raw slider value is normalized to a **0–100 integer** and stored in the script's live `dialValues` state object.
+2. The equivalent servo angle (0–180°) is forwarded to `relay.py` so the physical limb reflects the dial's approximate position.
+
+The stored 0–100 values are then read continuously by the speech engine and the animation loop:
+
+| Dial | Servo channel | Normalized value drives |
+|---|---|---|
+| WARMTH | ch 0 Wall-E head | Voice pitch (0.85 → 1.15) |
+| VERBOSITY | ch 1 Wall-E waist | Head-bob animation density (contributes 50 % to tick interval) |
+| ENERGY | ch 2 Wall-E arm | Speech rate (0.75 → 1.40) + head-bob speed (contributes 50 % to tick interval) |
+| DIRECTNESS | ch 3 EVE head | Language sharpness (affects language model prompt) |
+| CONCRETENESS | ch 4 EVE body | Specificity of AI output (affects language model prompt) |
+| STRUCTURE | ch 5 EVE arm | Prose vs. formatted output (affects language model prompt) |
+
+### Energy and Verbosity as Animation Speed Controllers
+
+The head-bob tick interval is the primary mechanical performance variable driven by dials:
+
+```
+driver       = (dialValues.ENERGY + dialValues.VERBOSITY) / 2
+interval_ms  = 200 − (driver / 100) × 150
+```
+
+- **ENERGY = 100, VERBOSITY = 100** → driver = 100 → interval = **50 ms** (20 sharp nods/sec)
+- **ENERGY = 0,   VERBOSITY = 0**   → driver = 0   → interval = **200 ms** (5 slow nods/sec)
+- **Mixed values** land proportionally between those extremes
+
+This means a high-energy, high-verbosity scene produces rapid, staccato mechanical bursts. A low-energy, calm scene produces slow, deliberate nods that match the languid speech rate.
 
 ### Unified Control Dashboard
 
@@ -191,14 +232,19 @@ Angles are clamped to 0–180°. Only channels 0–5 are accepted by the firmwar
 ```
 RobotProject/
 │
-├── MASTER_PLAN.md                   ← this file
+├── README.md                           ← quick-start guide
+├── MASTER_PLAN.md                      ← architectural blueprint (this file)
+├── .gitignore
 │
-├── relay.py                         ← Python WebSocket server + serial relay
+├── browser/
+│   └── wall_e_eve.user.js              ← Tampermonkey userscript for shape-models.com
 │
-├── wall_e_eve.user.js               ← Tampermonkey userscript for shape-models.com
+├── server/
+│   └── relay.py                        ← Python WebSocket server + serial relay
 │
-└── esp32_servo_controller/
-    └── esp32_servo_controller.ino   ← Arduino firmware for ESP32 + PCA9685
+└── firmware/
+    └── esp32_servo_controller/
+        └── esp32_servo_controller.ino  ← Arduino firmware for ESP32 + PCA9685
 ```
 
 ### Planned additions (not yet created)
@@ -207,10 +253,10 @@ RobotProject/
 RobotProject/
 │
 ├── dashboard/
-│   └── index.html                   ← Local HTML master control board
+│   └── index.html                      ← Local HTML master control board
 │
 └── docs/
-    └── wiring_photos/               ← Reference images for physical assembly
+    └── wiring_photos/                  ← Reference images for physical assembly
 ```
 
 ---
@@ -223,9 +269,11 @@ RobotProject/
 - [x] `wall_e_eve.user.js` — Tampermonkey userscript binds to tone dials on shape-models.com
 
 ### Phase 2 — Speech & Loop (browser automation)
-- [ ] Web Speech API voice synthesis integrated into userscript
-- [ ] Cadence bobbing (30 ms servo pulse loop during speech playback)
-- [ ] Automatic conversation handoff between Wall-E and EVE tabs
+- [x] Web Speech API voice synthesis integrated into userscript
+- [x] Syllable-synchronized head-bob loop (ENERGY + VERBOSITY scaled interval, ch 0)
+- [x] MutationObserver output-stream detection with 850 ms debounce
+- [x] Dial values normalized to 0-100 and stored as live speech/animation parameters
+- [ ] Automatic conversation handoff between Wall-E and EVE tabs (next milestone)
 
 ### Phase 3 — Physical Build (hardware)
 - [ ] Stage base constructed with servo mounting positions
@@ -245,4 +293,4 @@ RobotProject/
 
 ---
 
-*Last updated: 2026-07-10*
+*Last updated: 2026-07-10 — Sections 4 & 5 revised to reflect automated text-driven pipeline (v2.0.0 userscript)*
