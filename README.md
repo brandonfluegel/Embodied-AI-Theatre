@@ -2,9 +2,22 @@
 
 A personal project by **Brandon Fluegel**, human factors researcher.
 
-The question behind this: when an AI is given a physical body that occupies shared space and moves in response to language, how does that change the interaction? Screen-based AI feels like using a tool. Something that turns toward you, gestures while it speaks, and physically reacts to what the other character just said feels categorically different in ways that are hard to quantify but immediately obvious to anyone watching.
+**The research question:** Does giving an AI a physical body change how people experience it? Screen-based AI is perceived as a tool. An AI that occupies shared physical space, moves while it speaks, and reacts with its body to what another character just said reads differently to observers. This project is a working prototype to study that difference firsthand.
 
-I'm using [shape-models.com](https://www.shape-models.com/play/tone) as the generative layer and two Hasbro Star Wars Black Series figures as the physical output. Darth Vader and a Stormtrooper run an autonomous spoken debate -- voice synthesis, head movement, arm gestures, and full conversation handoff between characters, all running without intervention. The fabrication side is six MG90S servos, tendon mechanics routed through a custom stage base, and action figures that were never designed to move.
+**How shape-models.com is being used:**
+
+shape-models.com is an AI behavior design platform built around a set of interactive playgrounds. This project treats it as the full generative backbone of a two-character debate system and drives all six of its playgrounds simultaneously from a single browser tab:
+
+- **/play/tone** is the main control surface. Six dials (Warmth, Verbosity, Energy, Directness, Concreteness, Structure) are read continuously. Each dial value shapes AI language output, adjusts the voice synthesis parameters, and controls the speed and character of the servo movements in real time.
+- **/play/persona** is used to define each character's identity, backstory, and voice. Darth Vader and the Stormtrooper are configured as distinct AI personas that maintain consistent speech patterns across the debate.
+- **/play/refusal** handles content boundaries. When a refusal phrase is detected in the output stream, the script cancels speech and moves both figures into a defined defensive posture rather than continuing.
+- **/play/diff** provides side-by-side prompt comparison to test how parameter changes affect output quality and character consistency.
+- **/play/eval** receives the session telemetry log after each run for automated scoring of the dialogue.
+- **/play/choreographer** is loaded in the background for future pacing and turn-taking configuration.
+
+All five background playgrounds run as hidden iframes inside the main tone tab. A floating HUD injected into the page provides unified control over all of them without switching tabs.
+
+**The hardware side:** two Hasbro Star Wars Black Series figures on a custom stage, six MG90S servos mounted beneath the deck, tendon lines routed up through the base to the joint hinges of each figure. An ESP32 running over USB serial receives positional commands from a local Python server and drives a PCA9685 PWM board to move all six channels.
 
 ---
 
