@@ -1,8 +1,10 @@
 ﻿# Embodied AI Theatre -- Featuring Darth Vader & Stormtrooper
 
-A personal project by **Brandon Fluegel**. I'm experimenting with [shape-models.com](https://www.shape-models.com/play/tone), seeing how far I can push it as a live AI platform, and using that as an excuse to get into servo control, tendon mechanics, and physical fabrication.
+A personal project by **Brandon Fluegel**, human factors researcher.
 
-The setup: two Hasbro Star Wars Black Series figures sit on a stage. Darth Vader and a Stormtrooper take turns speaking to each other, driven by real AI running in the browser. When one talks, his head bobs with the words, his arm lifts, his torso turns. The other one reacts. Nobody touches anything -- it just goes.
+The question behind this: when an AI is given a physical body that occupies shared space and moves in response to language, how does that change the interaction? Screen-based AI feels like using a tool. Something that turns toward you, gestures while it speaks, and physically reacts to what the other character just said feels categorically different in ways that are hard to quantify but immediately obvious to anyone watching.
+
+I'm using [shape-models.com](https://www.shape-models.com/play/tone) as the generative layer and two Hasbro Star Wars Black Series figures as the physical output. Darth Vader and a Stormtrooper run an autonomous spoken debate -- voice synthesis, head movement, arm gestures, and full conversation handoff between characters, all running without intervention. The fabrication side is six MG90S servos, tendon mechanics routed through a custom stage base, and action figures that were never designed to move.
 
 ---
 
