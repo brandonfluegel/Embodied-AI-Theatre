@@ -4,8 +4,8 @@
   Receives servo commands over USB Serial and drives 6 MG90S servos
   through an Adafruit PCA9685 board.
 
-  Wall-E: ch 0 = head bob | ch 1 = waist twist | ch 2 = arm
-  EVE:    ch 3 = head tilt | ch 4 = body lean  | ch 5 = arm
+  Darth Vader:           ch 0 = head bob  | ch 1 = torso twist | ch 2 = arm tendon
+  Imperial Stormtrooper: ch 3 = head turn | ch 4 = torso lean  | ch 5 = arm tendon
 
   Command format (one per line):  S<channel>:<angle>
   Examples:  S0:90   S3:45   S5:135

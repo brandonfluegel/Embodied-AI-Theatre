@@ -60,7 +60,7 @@ This is the code that lives on the ESP32 microcontroller chip itself. It:
 | 4 | Stormtrooper | Torso lean | Forward and back engagement lean |
 | 5 | Stormtrooper | Arm gesture | Tendon-pulled — blaster hand raise or pointing motion |
 
-Channels 0 and 4 are driven automatically by the speech animation loop. Channels 1–3 and 5 are driven by the tone dial values from the webpage.
+Channels 0 and 3 are driven automatically by the speech animation loop — Vader's head bobs while he speaks, the Trooper's head turns while it speaks. Channels 1, 2, 4, and 5 are driven by the tone dial values from the webpage.
 
 ---
 

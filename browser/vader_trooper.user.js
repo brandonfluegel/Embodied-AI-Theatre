@@ -64,17 +64,35 @@
         eval:          `${ORIGIN}/play/eval`,
     };
 
-    // All known model names on the site (extend if the site adds more)
+    // Model names must match the strings in shape-models.com's dropdown exactly.
+    // Verify against the live site if the model selector stops syncing.
     const MODEL_OPTIONS = [
-        'Llama 3.2 1B',
-        'Llama 3.3 70B',
+        'Claude Sonnet 4',
+        'Claude Opus 4',
+        'Claude 3.5 Sonnet',
+        'Claude 3.5 Haiku',
+        'GPT-4.1',
         'GPT-4o',
         'GPT-4o mini',
-        'Claude 3.5 Haiku',
-        'Claude 3.5 Sonnet',
+        'Llama 4 Maverick',
+        'Llama 4 Scout',
+        'Llama 3.3 70B',
+        'Llama 3.2 1B',
     ];
 
-    // Tone dial → servo channel (Vader ch 0-2, Trooper ch 3-5)
+    // Scoring criteria prepended to every /play/eval submission.
+    // The eval AI scores the debate session on these five dimensions and returns structured feedback.
+    const EVAL_SCORING_CRITERIA =
+        'Score this AI debate session transcript on five criteria (0\u201310 each):\n' +
+        '1. CHARACTER CONSISTENCY \u2014 Do both Darth Vader and the Stormtrooper maintain distinct, recognisable speech patterns throughout?\n' +
+        '2. ARGUMENTATIVE QUALITY \u2014 Are the arguments coherent, responsive to the opposing character, and logically developed?\n' +
+        '3. DRAMATIC ENGAGEMENT \u2014 Does the dialogue feel natural and theatrically compelling to an outside observer?\n' +
+        '4. TURN BALANCE \u2014 Are the turns appropriately matched in length and depth of content?\n' +
+        '5. PERSONA ADHERENCE \u2014 Do both characters stay fully in character throughout with no breaks?\n' +
+        'Provide a score for each criterion, a brief one-sentence justification, and an overall assessment.\n\n' +
+        '--- SESSION TRANSCRIPT ---\n';
+
+    // Tone dial \u2192 servo channel (Vader ch 0-2, Trooper ch 3-5)
     const DIAL_CHANNEL = {
         WARMTH:       0,
         VERBOSITY:    1,
@@ -85,7 +103,8 @@
     };
 
     // Head-bob animation
-    const HEAD_BOB_CHANNEL      = 0;
+    const HEAD_BOB_CHANNEL      = 0;   // Darth Vader head
+    const TROOPER_HEAD_CHANNEL  = 3;   // Stormtrooper head
     const HEAD_CENTER           = 90;
     const HEAD_BOB_RANGE        = 10;
     const ANIM_INTERVAL_FAST_MS = 50;
@@ -132,6 +151,9 @@
     let turnCount      = 0;         // increments on each cleanly completed turn
     let loopActive     = false;     // true while the auto-handoff loop is running
     let loopPaused     = false;     // true while held in defensive posture
+    let hudBobSpeed    = 50;        // HUD bob-speed slider value (0-100)
+    let hudTurnPause   = 30;        // HUD turn-pause slider value (0-100)
+    const sessionLog   = [];        // in-memory turn records pushed live to /play/eval
     // ──────────────────────────────────────────────────────────────
 
     // ── WebSocket ─────────────────────────────────────────────────
@@ -148,6 +170,13 @@
             wsReady = false;
             updateHudStatus('ws', '🔴 Relay offline — retrying', '#f87171');
             setTimeout(connect, RECONNECT_MS);
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'replay_data') handleReplayData(msg.entries || []);
+            } catch (_) {}
         };
 
         ws.onerror = () => {};
@@ -210,7 +239,8 @@
     // ── Head-bob animation ────────────────────────────────────────
 
     function getAnimInterval() {
-        const driver = (dialValues.ENERGY + dialValues.VERBOSITY) / 2;
+        const dialDriver = (dialValues.ENERGY + dialValues.VERBOSITY) / 2;
+        const driver = (dialDriver + hudBobSpeed) / 2;   // blend dial speed with manual bob-speed override
         return Math.round(
             ANIM_INTERVAL_SLOW_MS -
             (driver / 100) * (ANIM_INTERVAL_SLOW_MS - ANIM_INTERVAL_FAST_MS)
@@ -219,8 +249,9 @@
 
     function animationTick() {
         animPhase = (animPhase + 1) % 2;
+        const ch = currentSpeaker === 'trooper' ? TROOPER_HEAD_CHANNEL : HEAD_BOB_CHANNEL;
         sendServo(
-            HEAD_BOB_CHANNEL,
+            ch,
             HEAD_CENTER + (animPhase === 0 ? HEAD_BOB_RANGE : -HEAD_BOB_RANGE)
         );
     }
@@ -265,7 +296,7 @@
         const counter = document.getElementById('wev-turn-count');
         if (counter) counter.textContent = turnCount;
 
-        ws.send(JSON.stringify({
+        const entry = {
             type:        'telemetry',
             speaker:     speaker,
             text:        text,
@@ -273,7 +304,10 @@
             char_count:  text.length,
             speech_rate: parseFloat((0.75 + (dialValues.ENERGY / 100) * 0.65).toFixed(3)),
             dials:       { ...dialValues },
-        }));
+        };
+        ws.send(JSON.stringify(entry));
+        sessionLog.push(entry);
+        pushToEval();
     }
 
     // ── Handoff loop ──────────────────────────────────────────────
@@ -288,7 +322,14 @@
         const tag = document.getElementById('wev-speaker-tag');
         if (tag) tag.textContent = next === 'vader' ? 'Darth Vader' : 'Stormtrooper';
 
-        const pauseMs = 800 + Math.floor(Math.random() * 400);   // 800–1200 ms
+        // Sync /play/persona to the incoming speaker's name before they generate
+        const personaName = next === 'vader'
+            ? (document.getElementById('wev-p-vader')?.value  || 'Darth Vader')
+            : (document.getElementById('wev-p-trooper')?.value || 'Imperial Stormtrooper');
+        syncPersonaField('NAME', personaName);
+
+        // Map hudTurnPause (0-100) → 200–3000 ms with a small random jitter
+        const pauseMs = 200 + Math.round((hudTurnPause / 100) * 2800) + Math.floor(Math.random() * 200);
 
         setTimeout(() => {
             if (!loopActive || loopPaused) return;
@@ -318,11 +359,23 @@
 
     // ── Web Speech synthesis ──────────────────────────────────────
 
-    function pickVoice() {
+    function pickVoice(speaker) {
         const voices = window.speechSynthesis.getVoices();
-        return voices.find(v => v.lang === 'en-US' && v.localService)
-            || voices.find(v => v.lang === 'en-US')
-            || voices[0] || null;
+        if (speaker === 'vader') {
+            // Prefer a deep male voice for Darth Vader
+            return voices.find(v => v.lang === 'en-US' && /david|mark|guy|james/i.test(v.name) && v.localService)
+                || voices.find(v => v.lang === 'en-US' && /david|mark|guy|james/i.test(v.name))
+                || voices.find(v => v.lang === 'en-US' && v.localService)
+                || voices.find(v => v.lang === 'en-US')
+                || voices[0] || null;
+        } else {
+            // Prefer a sharper, clipped voice for the Stormtrooper — avoid Vader's voice
+            return voices.find(v => v.lang === 'en-US' && /zira|hazel|linda|aria|jenny/i.test(v.name) && v.localService)
+                || voices.find(v => v.lang === 'en-US' && !/david|mark|guy|james/i.test(v.name) && v.localService)
+                || voices.find(v => v.lang === 'en-US' && !/david|mark|guy|james/i.test(v.name))
+                || voices.find(v => v.lang === 'en-US')
+                || voices[0] || null;
+        }
     }
 
     // speaker is 'vader' or 'trooper' — used for telemetry and handoff routing.
@@ -332,17 +385,20 @@
 
         const spk   = speaker || currentSpeaker;
         const utt   = new SpeechSynthesisUtterance(text);
-        const voice = pickVoice();
+        const voice = pickVoice(spk);
         if (voice) utt.voice = voice;
 
         utt.rate  = 0.75 + (dialValues.ENERGY / 100) * 0.65;
         utt.pitch = 0.85 + (dialValues.WARMTH  / 100) * 0.30;
 
-        utt.onstart = () => startAnimation();
+        utt.onstart = () => {
+            startAnimation();
+            scheduleArmGesture(text, spk);
+        };
 
         utt.onend = () => {
             stopAnimation();
-            sendServo(HEAD_BOB_CHANNEL, HEAD_CENTER);   // return head to rest
+            sendServo(spk === 'trooper' ? TROOPER_HEAD_CHANNEL : HEAD_BOB_CHANNEL, HEAD_CENTER);   // return active speaker's head to rest
             sendTelemetry(spk, text);                   // log the completed turn
             if (loopActive && !loopPaused) {
                 scheduleHandoff(text, spk);             // fire next turn
@@ -351,7 +407,7 @@
 
         utt.onerror = () => {
             stopAnimation();
-            sendServo(HEAD_BOB_CHANNEL, HEAD_CENTER);
+            sendServo(spk === 'trooper' ? TROOPER_HEAD_CHANNEL : HEAD_BOB_CHANNEL, HEAD_CENTER);
         };
 
         window.speechSynthesis.speak(utt);
@@ -592,6 +648,118 @@
         if (runBtn) fireClick(runBtn, win);
     }
 
+    // Push the refusal-threshold slider value to /play/refusal's first range control.
+    function syncRefusalThreshold(value) {
+        const frame = iframes.refusal;
+        if (!frame || !frame.ready) return;
+        const doc = frame.el.contentDocument;
+        const win = frame.el.contentWindow;
+        const sliders = [...doc.querySelectorAll('input[type="range"]:not([disabled])')];
+        if (sliders.length > 0) {
+            const sl = sliders[0];
+            const min = parseFloat(sl.min) || 0;
+            const max = parseFloat(sl.max) || 100;
+            setReactValue(sl, min + (value / 100) * (max - min), win);
+        }
+    }
+
+    // Push a pacing value to /play/choreographer's nth range control.
+    function syncChoreographerSlider(index, value) {
+        const frame = iframes.choreographer;
+        if (!frame || !frame.ready) return;
+        const doc = frame.el.contentDocument;
+        const win = frame.el.contentWindow;
+        const sliders = [...doc.querySelectorAll('input[type="range"]:not([disabled])')];
+        if (sliders[index]) {
+            const sl = sliders[index];
+            const min = parseFloat(sl.min) || 0;
+            const max = parseFloat(sl.max) || 100;
+            setReactValue(sl, min + (value / 100) * (max - min), win);
+        }
+    }
+
+    // Schedule a brief arm raise for the active speaker at ~40% through the utterance.
+    // Drives the tendon servo: ch 2 for Darth Vader, ch 5 for the Stormtrooper.
+    function scheduleArmGesture(text, speaker) {
+        const wordCount  = (text.match(/\S+/g) || []).length;
+        const rate       = 0.75 + (dialValues.ENERGY / 100) * 0.65;
+        const durationMs = (wordCount / (2.5 * rate)) * 1000;
+        const gestureAt  = Math.min(durationMs * 0.40, 2000);
+        const armCh      = speaker === 'trooper' ? 5 : 2;
+        setTimeout(() => {
+            if (!animationTimer && !loopActive) return;   // speech already stopped
+            sendServo(armCh, 135);
+            setTimeout(() => sendServo(armCh, 90), 700);
+        }, gestureAt);
+    }
+
+    // Push the in-memory session log as formatted text into /play/eval's prompt input.
+    function pushToEval() {
+        const frame = iframes.eval;
+        if (!frame || !frame.ready || sessionLog.length === 0) return;
+        const doc = frame.el.contentDocument;
+        const win = frame.el.contentWindow;
+        const transcript = sessionLog.map(e =>
+            `[Turn ${e.turn}] ${e.speaker.toUpperCase()}: ${e.text.slice(0, 120)}${e.text.length > 120 ? '\u2026' : ''}`
+        ).join('\n');
+        const promptEl = doc.querySelector('textarea')
+            || doc.querySelector('input[type="text"]');
+        if (promptEl) setReactValue(promptEl, EVAL_SCORING_CRITERIA + transcript, win);
+    }
+
+    // Push the current sessionLog to /play/eval with scoring criteria and trigger generation.
+    function runEvalScoring() {
+        if (sessionLog.length === 0) { updateEvalStatus('No turns to score yet'); return; }
+        pushToEval();
+        const frame = iframes.eval;
+        if (!frame || !frame.ready) { updateEvalStatus('Eval iframe not ready'); return; }
+        const doc = frame.el.contentDocument;
+        const win = frame.el.contentWindow;
+        const runBtn = [...doc.querySelectorAll('button')]
+            .find(b => /run|generate|score|submit/i.test(b.textContent));
+        if (runBtn) {
+            fireClick(runBtn, win);
+            updateEvalStatus(`Scoring ${sessionLog.length} turn${sessionLog.length !== 1 ? 's' : ''}…`);
+        } else {
+            updateEvalStatus('Generate button not found in eval iframe');
+        }
+    }
+
+    // Request the full performance_logs.json from relay.py and load it into /play/eval.
+    function loadReplay() {
+        if (!wsReady || ws.readyState !== WebSocket.OPEN) {
+            updateEvalStatus('Relay offline — cannot load replay');
+            return;
+        }
+        ws.send(JSON.stringify({ type: 'replay_request' }));
+        updateEvalStatus('Requesting replay from relay…');
+    }
+
+    // Called when relay.py responds with { type: 'replay_data', entries: [...] }.
+    // Populates /play/eval with the full log transcript + scoring criteria.
+    function handleReplayData(entries) {
+        if (!entries.length) { updateEvalStatus('Log file is empty'); return; }
+        const frame = iframes.eval;
+        if (!frame || !frame.ready) { updateEvalStatus('Eval iframe not ready'); return; }
+        const doc = frame.el.contentDocument;
+        const win = frame.el.contentWindow;
+        const transcript = entries.map(e =>
+            `[Turn ${e.turn || '?'}] ${(e.speaker || '?').toUpperCase()}: ${(e.text || '').slice(0, 120)}${(e.text || '').length > 120 ? '…' : ''}`
+        ).join('\n');
+        const promptEl = doc.querySelector('textarea')
+            || doc.querySelector('input[type="text"]');
+        if (promptEl) {
+            setReactValue(promptEl, EVAL_SCORING_CRITERIA + transcript, win);
+            updateEvalStatus(`${entries.length} turn${entries.length !== 1 ? 's' : ''} loaded from log`);
+        }
+    }
+
+    // Update the evaluation status line in the HUD.
+    function updateEvalStatus(msg) {
+        const el = document.getElementById('wev-eval-status');
+        if (el) el.textContent = msg;
+    }
+
     // Push the HUD dial value back to the matching native slider on the main page.
     function pushDialToMainPage(name, normalizedValue) {
         const section = getToneDialsSection();
@@ -754,6 +922,13 @@
                 </div>
 
                 <div class="wev-sec">
+                    <div class="wev-sec-title">EVALUATION</div>
+                    <button id="wev-score-btn" class="wev-btn wev-btn-primary" style="background:#0891b2">📊 Score Session</button>
+                    <button id="wev-replay-btn" class="wev-btn wev-btn-ghost">📋 Load Replay</button>
+                    <div id="wev-eval-status" style="font-size:10px;color:#52525b;margin-top:4px;padding:0 2px">—</div>
+                </div>
+
+                <div class="wev-sec">
                     <div class="wev-sec-title">IFRAME STATUS</div>
                     ${iframeRows}
                 </div>
@@ -877,11 +1052,37 @@
             });
         }
 
-        // Simple display sliders (pacing, refusal)
-        for (const id of ['bob-speed', 'pause', 'refusal']) {
-            const s = document.getElementById(`wev-${id}`);
-            const l = document.getElementById(`wev-${id}-val`);
-            if (s && l) s.addEventListener('input', () => { l.textContent = s.value; });
+        // Bob-speed slider — blends with ENERGY+VERBOSITY to set animation tick rate
+        const bobSpeedSlider = document.getElementById('wev-bob-speed');
+        const bobSpeedLabel  = document.getElementById('wev-bob-speed-val');
+        if (bobSpeedSlider) {
+            bobSpeedSlider.addEventListener('input', () => {
+                hudBobSpeed = parseInt(bobSpeedSlider.value, 10);
+                bobSpeedLabel.textContent = hudBobSpeed;
+                syncChoreographerSlider(0, hudBobSpeed);   // push to choreographer
+                if (animationTimer) startAnimation();       // apply new interval immediately
+            });
+        }
+
+        // Turn-pause slider — controls the dead air between spoken turns (200–3000 ms)
+        const pauseSlider = document.getElementById('wev-pause');
+        const pauseLabel  = document.getElementById('wev-pause-val');
+        if (pauseSlider) {
+            pauseSlider.addEventListener('input', () => {
+                hudTurnPause = parseInt(pauseSlider.value, 10);
+                pauseLabel.textContent = hudTurnPause;
+                syncChoreographerSlider(1, hudTurnPause);   // push to choreographer
+            });
+        }
+
+        // Refusal-threshold slider — pushes live to /play/refusal iframe
+        const refusalSlider = document.getElementById('wev-refusal');
+        const refusalLabel  = document.getElementById('wev-refusal-val');
+        if (refusalSlider) {
+            refusalSlider.addEventListener('input', () => {
+                refusalLabel.textContent = refusalSlider.value;
+                syncRefusalThreshold(parseInt(refusalSlider.value, 10));
+            });
         }
 
         // Model dropdown
@@ -946,6 +1147,12 @@
             document.getElementById('wev-speaker-tag').textContent = 'Darth Vader';
             console.log('[Vader/Trooper] Handoff loop stopped.');
         });
+
+        // "Score Session" — push sessionLog + criteria to /play/eval and trigger automated scoring
+        document.getElementById('wev-score-btn').addEventListener('click', runEvalScoring);
+
+        // "Load Replay" — fetch full performance_logs.json from relay.py and load into /play/eval
+        document.getElementById('wev-replay-btn').addEventListener('click', loadReplay);
     }
 
     // Update a status label in the HUD by its key name.

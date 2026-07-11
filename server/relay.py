@@ -1,12 +1,12 @@
 """
 relay.py
 --------
-WebSocket relay for the Wall-E & EVE servo pipeline.
+WebSocket relay for the Darth Vader & Imperial Stormtrooper servo pipeline.
 Receives tone-dial positions from shape-models.com/play/tone (via Tampermonkey)
 and forwards them to an ESP32 over USB serial.
 
-Wall-E: ch 0 = head bob | ch 1 = waist twist | ch 2 = arm
-EVE:    ch 3 = head tilt | ch 4 = body lean  | ch 5 = arm
+Darth Vader:         ch 0 = head bob | ch 1 = torso twist | ch 2 = arm tendon
+Imperial Stormtrooper: ch 3 = head turn | ch 4 = torso lean  | ch 5 = arm tendon
 
 Install once:
     pip install websockets pyserial
@@ -91,7 +91,7 @@ def append_telemetry(entry: dict) -> None:
 
     Expected fields coming from the browser script:
         type        "telemetry"
-        speaker     "walle" or "eve"
+        speaker     "vader" or "trooper"
         text        the full spoken text block
         turn        sequential turn number in this session
         char_count  character length of the text
@@ -112,6 +112,36 @@ def append_telemetry(entry: dict) -> None:
 
 
 # ── WebSocket handler ─────────────────────────────────────────────────────────
+
+async def send_replay(websocket: websockets.ServerConnection) -> None:
+    """
+    Read performance_logs.json line-by-line and send all valid entries back to
+    the browser as a single JSON message:
+
+        { "type": "replay_data", "entries": [...], "count": N }
+
+    Malformed lines are silently skipped so a partially-written file never
+    crashes the relay.  An empty or missing file returns count=0.
+    """
+    entries: list[dict] = []
+    if os.path.exists(LOGS_PATH):
+        try:
+            with open(LOGS_PATH, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entries.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        pass   # skip malformed lines
+        except OSError as exc:
+            print(f"[replay] Could not read {LOGS_PATH}: {exc}")
+
+    payload = json.dumps({"type": "replay_data", "entries": entries, "count": len(entries)})
+    await websocket.send(payload)
+    print(f"[replay] Sent {len(entries)} entr{'y' if len(entries) == 1 else 'ies'} to browser.")
+
 
 async def handle_client(
     websocket: websockets.ServerConnection,
@@ -137,6 +167,11 @@ async def handle_client(
             # Route them straight to the log file and skip servo processing.
             if isinstance(payload, dict) and payload.get("type") == "telemetry":
                 append_telemetry(payload)
+                continue
+
+            # Replay request: read performance_logs.json and send all entries back to the browser.
+            if isinstance(payload, dict) and payload.get("type") == "replay_request":
+                await send_replay(websocket)
                 continue
 
             commands = payload if isinstance(payload, list) else [payload]

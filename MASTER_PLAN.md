@@ -1,7 +1,7 @@
 # MASTER PLAN
 ## Darth Vader & Imperial Stormtrooper — Autonomous Physical-Digital AI Theatre
 ### Architectural Blueprint & Source of Truth
-### Current Version: v3.0.0 — Single-Tab Matrix Interface
+### Current Version: v3.3.0 — Full Dual-Character Embodied Loop
 
 ---
 
@@ -75,7 +75,7 @@ A debounce timer (850 ms) resets on every incoming chunk. When the page goes qui
 
 ### Stage 2 — Web Speech Text-to-Speech
 
-The cleaned text string is immediately handed to the browser's native `window.speechSynthesis` API — no external service, no API key, no network round-trip. A local US-English voice is selected automatically.
+The cleaned text string is immediately handed to the browser's native `window.speechSynthesis` API — no external service, no API key, no network round-trip. A dedicated US-English voice is selected per character. Darth Vader targets deep male voices (David, Mark, Guy, James on Windows); the Stormtrooper targets sharper voices (Zira, Hazel, Aria, Jenny) and actively avoids Vader's voice set. Both fall through gracefully to any available en-US voice if the preferred names are not installed on the host OS.
 
 Two dial parameters shape the utterance in real time before each sentence is spoken:
 
@@ -88,16 +88,21 @@ The interaction operates as a **closed-loop automated theatre**. When the active
 
 ### Stage 3 — Syllable-Synchronized Mechanical Bursts
 
-Physical movement is dynamically coupled to active speech synthesis. The moment `utterance.onstart` fires, a high-frequency animation loop begins inside the userscript. On every tick it sends an oscillating positional command to `ws://localhost:8765` on **Channel 0** (Darth Vader's head servo), alternating between **100°** and **80°** around the 90° neutral center.
+Physical movement is dynamically coupled to active speech synthesis. The moment `utterance.onstart` fires, the userscript launches two simultaneous effects on the **active speaker's channels only**. The silent character holds its last position throughout the opposing turn.
 
-The tick interval is computed from the live ENERGY and VERBOSITY dial values:
+**Head animation:** An oscillation loop sends commands to the active speaker's head channel — **Channel 0** (Darth Vader) while Vader speaks, **Channel 3** (Stormtrooper) while the Trooper speaks. The active channel alternates between **100° and 80°** around the 90° neutral center.
+
+**Arm gesture:** A single dramatic tendon raise is scheduled at approximately 40% through the estimated utterance duration (capped at 2 seconds). The speaker's arm servo — **ch 2** for Darth Vader, **ch 5** for the Stormtrooper — drives to **135°** for 700 ms, then returns to 90°. Duration is estimated from word count and the live speech rate so faster speech produces an earlier gesture cue.
+
+The tick interval is now computed from three sources — ENERGY dial, VERBOSITY dial, and the HUD Bob Speed slider:
 
 ```
-driver = (ENERGY + VERBOSITY) / 2        // 0-100
-interval_ms = 200 - (driver / 100) × 150  // 200 ms (slow) → 50 ms (fast)
+dialDriver  = (ENERGY + VERBOSITY) / 2          // 0-100
+driver      = (dialDriver + BOB_SPEED_HUD) / 2   // blends dial speed with manual override
+interval_ms = 200 − (driver / 100) × 150         // 200 ms (slow) → 50 ms (fast)
 ```
 
-The moment `utterance.onend` fires, `clearInterval` terminates the loop instantly and a final `S0:90` command snaps Darth Vader's head back to the neutral resting position. No servo motion persists between spoken turns.
+The moment `utterance.onend` fires, `clearInterval` terminates the head loop instantly and the active speaker's head channel snaps back to 90° neutral. The opposing character's channels are not touched. No servo motion persists between spoken turns.
 
 ### Conversation Handoff Flow
 
@@ -107,11 +112,15 @@ The moment `utterance.onend` fires, `clearInterval` terminates the loop instantl
     ↓  850 ms debounce confirms stream end
     ↓  text stripped of UI labels
     ↓
-[window.speechSynthesis.speak(utterance)]
-    ↓  utterance.onstart  → setInterval head-bob loop starts (ch 0)
-    ↓  utterance.onend   → clearInterval, S0:90 sent, head returns to rest
+[window.speechSynthesis.speak(utterance) — character-specific voice selected]
+    ↓  utterance.onstart  → head-bob loop starts on active speaker's head channel (ch 0 Vader | ch 3 Trooper)
+    ↓                     → arm gesture scheduled at ~40% through utterance (ch 2 Vader | ch 5 Trooper → 135° for 700 ms)
+    ↓  utterance.onend   → loop cleared, speaker head → S<ch>:90, entry pushed to sessionLog
+    ↓                     → pushToEval() writes live transcript to /play/eval iframe
     ↓
-[userscript copies text → pastes into opposing character's prompt]
+[scheduleHandoff waits hudTurnPause delay (200–3000 ms, HUD-controlled)]
+    ↓  syncPersonaField('NAME', …) pushes incoming speaker's name to /play/persona
+    ↓  pastes completed text into opposing character's prompt
     ↓  triggers next generation phase
     ↓
 [loop repeats indefinitely]
@@ -144,7 +153,7 @@ Every completed spoken turn is written to `server/performance_logs.json` by the 
 | `dial_snapshot` | All six dial normalized values (0–100) at generation time |
 | `speech_rate` | Computed `utterance.rate` value used for playback |
 
-This log is designed to be dropped directly into the /play/eval iframe for automated quality scoring of the dialogue session.
+This log persists to disk across sessions. A parallel in-memory `sessionLog` array mirrors the same records inside the browser. After every completed turn, `pushToEval()` formats the full session as a running `[Turn N] SPEAKER: text…` transcript and writes it directly into the `/play/eval` iframe's prompt input for real-time automated scoring — no manual file handling required.
 
 ---
 
@@ -165,27 +174,28 @@ The stored 0–100 values are then read continuously by the speech engine and th
 
 | Dial | Servo channel | Normalized value drives |
 |---|---|---|
-| WARMTH | ch 0 Darth Vader head | Voice pitch (0.85 → 1.15) |
+| WARMTH | ch 0 Darth Vader head | Voice pitch (0.85 → 1.15) — dial sets resting position; head animation loop takes command priority during active speech |
 | VERBOSITY | ch 1 Darth Vader torso | Head-bob animation density (contributes 50 % to tick interval) |
 | ENERGY | ch 2 Darth Vader arm | Speech rate (0.75 → 1.40) + head-bob speed (contributes 50 % to tick interval) |
 | DIRECTNESS | ch 3 Stormtrooper head | Language sharpness (affects language model prompt) |
 | CONCRETENESS | ch 4 Stormtrooper torso | Specificity of AI output (affects language model prompt) |
 | STRUCTURE | ch 5 Stormtrooper arm | Prose vs. formatted output (affects language model prompt) |
 
-### Energy and Verbosity as Animation Speed Controllers
+### Animation Speed — Energy, Verbosity, and Bob Speed
 
-The head-bob tick interval is the primary mechanical performance variable driven by dials:
+The head animation tick interval is driven by three sources: the ENERGY dial, VERBOSITY dial, and the HUD Bob Speed slider. The dial pair is averaged first, then blended 50/50 with the manual Bob Speed override:
 
 ```
-driver       = (dialValues.ENERGY + dialValues.VERBOSITY) / 2
-interval_ms  = 200 − (driver / 100) × 150
+dialDriver  = (dialValues.ENERGY + dialValues.VERBOSITY) / 2
+driver      = (dialDriver + hudBobSpeed) / 2
+interval_ms = 200 − (driver / 100) × 150
 ```
 
-- **ENERGY = 100, VERBOSITY = 100** → driver = 100 → interval = **50 ms** (20 sharp nods/sec)
-- **ENERGY = 0,   VERBOSITY = 0**   → driver = 0   → interval = **200 ms** (5 slow nods/sec)
+- **All three at 100** → driver = 100 → interval = **50 ms** (20 sharp bursts/sec)
+- **All three at 0**   → driver = 0   → interval = **200 ms** (5 slow nods/sec)
 - **Mixed values** land proportionally between those extremes
 
-This means a high-energy, high-verbosity scene produces rapid, staccato mechanical bursts. A low-energy, calm scene produces slow, deliberate nods that match the languid speech rate.
+This means a high-energy, high-verbosity scene with Bob Speed pushed up produces rapid, staccato bursts on the active speaker's head channel. A calm scene with low values produces slow, deliberate motion that matches the languid speech rate. Bob Speed gives the operator a direct override that bypasses the dial values entirely when manual control is preferred.
 
 ### Unified Master HUD
 
@@ -197,9 +207,10 @@ The HUD is a fixed-position panel, 272 px wide, anchored to the right edge of th
 |---|---|
 | Model Selection | Syncs the chosen AI model to all five background iframes simultaneously |
 | Tone Dials | Six sliders mirroring the main page dials; changes push to main page AND all iframes |
-| Persona | Darth Vader and Stormtrooper name fields; pushes to the /play/persona iframe's NAME and ROLE inputs |
-| Pacing | Bob speed and Turn pause sliders for future choreography timing control |
-| Refusal Threshold | Slider targeted at the /play/refusal iframe's boundary configuration |
+| Persona | Darth Vader and Stormtrooper name fields; the incoming speaker's name is auto-pushed to /play/persona's NAME field on every conversation handoff so the model always generates from the correct character identity |
+| Pacing | Bob Speed blends live with ENERGY+VERBOSITY to set animation tick rate; Turn Pause maps 0–100 → 200–3000 ms inter-turn gap; both push values to /play/choreographer on every change |
+| Refusal Threshold | Pushes live to /play/refusal's first boundary range control via React-compatible setter |
+| Evaluation | “📊 Score Session” pushes `sessionLog` + five-dimension scoring criteria to `/play/eval` and clicks generate; “📋 Load Replay” fetches `performance_logs.json` from relay.py and populates `/play/eval` for scoring of past sessions |
 | Iframe Status | Live 🟢/🟡/🔴 indicator for each of the five background iframes |
 | Sync All | Force-pushes all current HUD values to every ready iframe at once |
 | Generate | Triggers the main page's Run button from the HUD without touching the keyboard |
@@ -215,7 +226,7 @@ All six shape-models.com playgrounds are loaded and controlled from inside the s
 | iframe key | URL loaded | Purpose |
 |---|---|---|
 | `persona` | `/play/persona` | Character backstory, voice, and name definitions |
-| `choreographer` | `/play/choreographer` | Conversation pacing and turn-taking rules |
+| `choreographer` | `/play/choreographer` | Conversation pacing and turn-taking rules — receives HUD Bob Speed (slot 0) and Turn Pause (slot 1) on every slider change |
 | `refusal` | `/play/refusal` | Boundary phrase configuration and safety settings |
 | `diff` | `/play/diff` | Side-by-side prompt comparison and A/B testing |
 | `eval` | `/play/eval` | Automated quality scoring of completed dialogue sessions |
@@ -360,11 +371,12 @@ RobotProject/
 
 ## 10. Development Checklist
 
-> **Status as of 2026-07-10 — Software pipeline v3.1.0 is locked down and verified.**
-> The full digital stack (browser userscript, Python relay, ESP32 firmware) is complete and
-> running cleanly in mock mode on the ThinkPad. No further software work is required before
-> the physical build begins. The project is now paused on the software side and is perfectly
-> positioned to move directly into Phase 3 the moment the physical hardware components arrive.
+> **Status as of 2026-07-11 — Software pipeline v3.3.0. Full dual-character embodied loop is locked and verified.**
+> Both figures now animate independently: Vader bobs on ch 0 and Trooper turns on ch 3 during their own speech
+> turns only. Arm tendon gestures fire automatically mid-utterance on ch 2 and ch 5. Each character speaks
+> with a distinct voice. All HUD sliders are live and wired to their target iframes (refusal, choreographer,
+> animation engine). The /play/eval iframe receives a live running transcript after every turn. Persona sync
+> fires on every handoff. The digital stack is complete and fully optimised. Phase 3 begins on hardware arrival.
 
 ### Phase 1 — Digital Pipeline (software only)
 - [x] `relay.py` — WebSocket server receives dial data, forwards to ESP32 via serial
@@ -381,7 +393,16 @@ RobotProject/
 - [x] React-compatible native prototype value sync from HUD to all iframes
 - [x] Refusal trigger pattern matching → defensive posture servo commands (ch 0 → 60°, ch 3 → 120°)
 - [x] Telemetry logging in `relay.py` → `server/performance_logs.json` (NDJSON, append-only)
-- [x] Automatic conversation handoff — Darth Vader ↔ Stormtrooper loop with 800–1200 ms natural pause
+- [x] Automatic conversation handoff — Darth Vader ↔ Stormtrooper loop with variable pause (200–3000 ms, HUD-controlled)
+- [x] Dual-character head animation — ch 0 animates while Vader speaks; ch 3 animates while Trooper speaks; silent character holds still
+- [x] Per-speaker voice differentiation — `pickVoice(speaker)` selects deep male voices for Vader, distinct sharp voices for Trooper
+- [x] Arm gesture auto-triggers — tendon servos (ch 2 Vader, ch 5 Trooper) raise to 135° at ~40% through each utterance, return to 90° after 700 ms
+- [x] HUD Pacing sliders live — Bob Speed blends with ENERGY+VERBOSITY for animation interval; Turn Pause maps 0–100 → 200–3000 ms
+- [x] HUD Refusal Threshold slider pushes live to /play/refusal iframe boundary range control
+- [x] Choreographer iframe integrated — Bob Speed → slot 0, Turn Pause → slot 1 pushed on every HUD slider change
+- [x] Persona sync on handoff — active speaker's name pushed to /play/persona NAME field before each generation fires
+- [x] /play/eval live feed — `sessionLog` accumulates per-turn records; `pushToEval()` writes formatted transcript to eval iframe after every completed turn
+- [x] Model list updated — Claude Sonnet/Opus 4, GPT-4.1, Llama 4 Maverick/Scout added as primary options
 
 ### Phase 3 — Physical Build (hardware)
 - [ ] Stage base constructed with servo mounting positions
@@ -395,10 +416,10 @@ RobotProject/
 - [ ] Full autonomous loop tested for 10+ minutes without intervention
 
 ### Phase 5 — Evaluation & Scoring
-- [ ] performance_logs.json pipeline connected to /play/eval iframe
-- [ ] Automated scoring criteria defined and tested
-- [ ] Session replay from log file verified
+- [x] `/play/eval` live feed connected — `sessionLog` + `pushToEval()` writes running transcript to iframe after each turn; `relay.py` continues writing NDJSON to `performance_logs.json`
+- [x] Automated scoring criteria defined — five-dimension `EVAL_SCORING_CRITERIA` constant prepended to every eval submission; `runEvalScoring()` pushes transcript + criteria to `/play/eval` and triggers generation via HUD button
+- [x] Session replay from `performance_logs.json` verified — `relay.py` `send_replay()` reads NDJSON on demand and sends all entries back over the WebSocket; `loadReplay()` in browser populates `/play/eval` with full log + scoring criteria; HUD “Load Replay” button triggers the end-to-end pipeline
 
 ---
 
-*Last updated: 2026-07-11 — Characters swapped to Hasbro Star Wars The Black Series: Darth Vader (Character A) and Imperial Stormtrooper (Character B). All mechanical, dialogue, and telemetry references updated.*
+*Last updated: 2026-07-11 — v3.3.0 + Phase 5 complete: five-dimension eval scoring criteria, `runEvalScoring()`, `send_replay()` in relay.py, `loadReplay()` + `handleReplayData()` in browser, EVALUATION HUD section with Score Session and Load Replay buttons, `ws.onmessage` receiver added. All software todos resolved.*
