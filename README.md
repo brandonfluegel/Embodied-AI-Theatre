@@ -13,7 +13,7 @@ shape-models.com is an AI behavior design platform built around a set of interac
 - **/play/refusal** handles content boundaries. When a refusal phrase is detected in the output stream, the script cancels speech and moves both figures into a defined defensive posture rather than continuing.
 - **/play/diff** provides side-by-side prompt comparison to test how parameter changes affect output quality and character consistency.
 - **/play/eval** receives the session telemetry log after each run for automated scoring of the dialogue.
-- **/play/choreographer** is loaded in the background for future pacing and turn-taking configuration.
+- **/play/choreographer** is loaded in the background for conversation pacing. The HUD Bob Speed and Turn Pause sliders push their values into the choreographer's range controls in real time.
 
 All five background playgrounds run as hidden iframes inside the main tone tab. A floating HUD injected into the page provides unified control over all of them without switching tabs.
 
@@ -37,19 +37,24 @@ This is a Tampermonkey userscript that lives inside Google Chrome. It drives the
 
 **`server/relay.py`** — The local data bridge
 
-This is a small Python program that runs quietly in your terminal the whole time the theatre is running. It:
+This is a small Python program that runs in the background the whole time the theatre is running. It:
 
-- Opens a local WebSocket server on your machine so the browser script has somewhere to send its signals
-- Picks those signals up and immediately forwards them down the USB cable to the ESP32 chip
-- Has a built-in **`MOCK_MODE` flag** at the top of the file — when set to `True`, it prints the simulated motor data to your terminal instead of looking for real hardware, so you can test everything without any physical parts connected
+- Opens a local WebSocket server so the browser script has somewhere to send commands
+- Forwards servo commands (`S<ch>:<angle>`) down the USB cable to the ESP32
+- Reads ACK responses echoed back by the ESP32 and logs them to the terminal
+- Handles a full sweep test and a single-channel isolation test for Phase 3 wiring verification
+- Handles session replay requests: reads `performance_logs.json` and sends the full log back to the browser
+- Logs eval-feedback events when the eval AI score triggers automatic dial adjustments
+- Has a built-in **`MOCK_MODE` flag** at the top of the file — when `True`, it prints simulated commands instead of opening a serial port, so you can run the full pipeline without hardware
 
 **`firmware/esp32_servo_controller/esp32_servo_controller.ino`** — The motor firmware
 
 This is the code that lives on the ESP32 microcontroller chip itself. It:
 
-- Listens to the USB cable at 115200 baud for incoming commands
-- Reads each command (formatted as `S0:90`, `S3:45`, and so on)
-- Tells the PCA9685 driver board to move the correct motor to the correct angle, instantly
+- Listens to the USB cable at 115200 baud for incoming `S<ch>:<angle>` commands
+- Clamps each angle to per-servo soft limits (`SOFT_MIN_ANGLE` / `SOFT_MAX_ANGLE` arrays) before moving — edit these during Phase 4 calibration
+- Tells the PCA9685 driver board to move the correct servo to the clamped angle
+- Echoes `ACK:S<ch>:<applied_angle>` back over serial so relay.py can log the effective angle
 
 ---
 
@@ -64,7 +69,7 @@ This is the code that lives on the ESP32 microcontroller chip itself. It:
 | 4 | Stormtrooper | Torso lean | Forward and back engagement lean |
 | 5 | Stormtrooper | Arm gesture | Tendon-pulled — blaster hand raise or pointing motion |
 
-Channels 0 and 3 are driven automatically by the speech animation loop — Vader's head bobs while he speaks, the Trooper's head turns while it speaks. Channels 1, 2, 4, and 5 are driven by the tone dial values from the webpage.
+Channels 0 and 3 animate automatically during speech — Vader's head bobs (ch 0) while he speaks, the Trooper's head turns (ch 3) while it speaks. Channels 2 and 5 also fire automatically mid-utterance as arm-tendon raises, then return to rest. Channels 1 and 4 (torso servos) follow the tone dial values.
 
 ---
 

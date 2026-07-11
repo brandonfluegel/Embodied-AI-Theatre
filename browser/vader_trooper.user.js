@@ -20,28 +20,35 @@
   4. Go to https://www.shape-models.com/play/tone.
   5. The purple HUD panel will appear on the right side of the page.
 
-  WHAT'S NEW IN v3.0.0
+  WHAT'S NEW IN v3.4.0
   ---------------------
-  - Floating Master HUD sidebar with unified controls for all playgrounds.
-  - Five hidden same-origin iframes load /play/persona, /play/diff, etc. in the
-    background so their native controls can be driven from this single tab.
-  - HUD tone dials push values both to the main page's native sliders AND to the
-    matching sliders inside every loaded iframe simultaneously.
-  - Model dropdown on the HUD syncs the selected model across all iframes.
-  - Persona name fields push to the /play/persona iframe's NAME input.
-  - "Sync All" button force-pushes every current HUD value to every ready iframe.
-  - "Generate" button clicks the main page's run button from the HUD.
-  - All v2 features kept: MutationObserver stream detection, Web Speech synthesis,
-    head-bob servo animation scaled by ENERGY + VERBOSITY dials.
+  - Dual-character animation: Vader head (ch 0) bobs while Vader speaks;
+    Trooper head (ch 3) turns while the Trooper speaks. Silent figure holds still.
+  - Arm tendon gestures (ch 2 / ch 5) auto-fire at ~40% through each utterance.
+  - Per-speaker voice differentiation: deep male voices for Vader, sharp for Trooper.
+  - Temperature slider now captured as a physical noise source — drives random
+    servo micro-deviations between turns scaled to temperature value.
+  - Sentiment engine: aggressive dialogue auto-injects emotional intensity modifiers
+    into the /play/persona backstory textarea before each generation.
+  - Eval closed-loop feedback: session score below 6.0/10 auto-lowers ENERGY and
+    VERBOSITY dials and returns both heads to neutral.
+  - Diff monitor: Jaccard similarity < 0.35 between /play/diff outputs triggers
+    Trooper head-pan and Vader arm-hold until outputs converge.
+  - HUD Calibration panel: per-channel angle slider, ▶ Test CH, ↓ Set Min,
+    ↑ Set Max, and ⚙ Sweep All Channels for Phase 3/4 hardware bring-up.
+  - Session timer (m:ss) and live animation ticks/s meter in the HUD loop section.
+  - Loop health watchdog: ⚠️ alert after 90 s of loop inactivity.
 
   HUD SECTIONS
   ------------
-  MODEL       — picks the AI model; syncs to all iframes
-  TONE DIALS  — six dials; mirrors the main page + pushes to iframes
-  PERSONA     — Darth Vader and Stormtrooper name fields → /play/persona iframe
-  PACING      — bob speed and turn-pause sliders (drive animation timing)
-  REFUSAL     — threshold slider → /play/refusal iframe
-  IFRAMES     — live status dot for each background iframe
+  MODEL        — picks the AI model; syncs to all five background iframes
+  TONE DIALS   — six dials + read-only TEMP indicator; mirrors main page + all iframes
+  PERSONA      — name fields, live Sentiment badge; modifier auto-injected on handoff
+  PACING       — Bob Speed + Turn Pause; push live to /play/choreographer
+  REFUSAL      — threshold slider → /play/refusal iframe
+  EVALUATION   — Score Session + Load Replay → /play/eval iframe
+  CALIBRATION  — per-channel slider, Test CH, Set Min/Max, Sweep All
+  IFRAME STATUS — live 🟢/🟡/🔴 indicator per background iframe
 */
 
 (function () {
