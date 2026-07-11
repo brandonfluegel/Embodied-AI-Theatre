@@ -1,14 +1,14 @@
 /*
   esp32_servo_controller.ino
   --------------------------
-  Listens for servo commands on USB Serial (115200 baud) and drives
-  up to 16 servos through an Adafruit PCA9685 PWM/Servo driver.
+  Receives servo commands over USB Serial and drives 6 MG90S servos
+  through an Adafruit PCA9685 board.
 
-  Expected serial command format (one per line):
-      C<channel>,<angle>
-  Examples:
-      C0,90      → move servo on channel 0 to 90°
-      C3,45      → move servo on channel 3 to 45°
+  Wall-E: ch 0 = head bob | ch 1 = waist twist | ch 2 = arm
+  EVE:    ch 3 = head tilt | ch 4 = body lean  | ch 5 = arm
+
+  Command format (one per line):  S<channel>:<angle>
+  Examples:  S0:90   S3:45   S5:135
 
   Required libraries (install via Arduino Library Manager):
       • Adafruit PWM Servo Driver Library
@@ -40,7 +40,10 @@ static const uint16_t SERVO_MAX   = 600;   // pulse count for 180°
 static const uint8_t  PWM_FREQ_HZ = 50;    // standard servo frequency
 
 // ── Serial input buffer ───────────────────────────────────────────
-static const uint8_t  BUF_SIZE    = 32;
+static const uint8_t  NUM_SERVOS             = 6;
+static const int      HOME_ANGLE[NUM_SERVOS] = {90, 90, 90, 90, 90, 90};
+
+static const uint8_t  BUF_SIZE    = 16;
 static char           inputBuf[BUF_SIZE];
 static uint8_t        bufIndex    = 0;
 
@@ -51,86 +54,54 @@ static uint8_t        bufIndex    = 0;
  */
 uint16_t angleToPulse(int angle) {
     angle = constrain(angle, 0, 180);
-    return map(angle, 0, 180, SERVO_MIN, SERVO_MAX);
+    return (uint16_t)map(angle, 0, 180, SERVO_MIN, SERVO_MAX);
 }
 
-/**
- * Move a single servo to the requested angle and print confirmation.
- */
-void moveServo(uint8_t channel, int angle) {
-    if (channel > 15) {
-        Serial.println("ERR channel out of range (0-15)");
-        return;
-    }
-    uint16_t pulse = angleToPulse(angle);
-    pca.setPWM(channel, 0, pulse);
-    Serial.print("OK C");
-    Serial.print(channel);
-    Serial.print(",");
-    Serial.println(angle);
+void moveServo(uint8_t ch, int angle) {
+    pca.setPWM(ch, 0, angleToPulse(angle));
 }
 
-/**
- * Parse and execute one complete line, e.g. "C3,120".
- * Ignores blank lines and unknown commands silently.
- */
 void processLine(const char* line) {
-    // Skip empty lines
-    if (line[0] == '\0') return;
+    if (line[0] != 'S' && line[0] != 's') return;
 
-    if (line[0] == 'C' || line[0] == 'c') {
-        // Expect: C<channel>,<angle>
-        int channel = -1;
-        int angle   = -1;
-        if (sscanf(line + 1, "%d,%d", &channel, &angle) == 2) {
-            moveServo((uint8_t)channel, angle);
-        } else {
-            Serial.print("ERR bad format: ");
-            Serial.println(line);
-        }
-    } else {
-        Serial.print("ERR unknown command: ");
-        Serial.println(line);
-    }
+    int ch    = -1;
+    int angle = -1;
+    if (sscanf(line + 1, "%d:%d", &ch, &angle) != 2) return;
+    if (ch < 0 || ch >= NUM_SERVOS)                   return;
+
+    moveServo((uint8_t)ch, constrain(angle, 0, 180));
 }
 
 // ── Arduino lifecycle ─────────────────────────────────────────────
 
 void setup() {
     Serial.begin(115200);
-    while (!Serial) { /* wait for USB Serial on some ESP32 variants */ }
-
-    Serial.println("[esp32] PCA9685 servo controller starting...");
 
     pca.begin();
-    pca.setOscillatorFrequency(27000000);   // trim for accuracy (27 MHz)
+    pca.setOscillatorFrequency(27000000);
     pca.setPWMFreq(PWM_FREQ_HZ);
-
-    // Give the PCA9685 a moment to stabilise
     delay(10);
 
-    Serial.println("[esp32] Ready. Send commands like: C0,90");
+    // Move all servos to the home position (90 degrees)
+    for (uint8_t i = 0; i < NUM_SERVOS; i++) {
+        moveServo(i, HOME_ANGLE[i]);
+    }
+
+    Serial.println("READY");
 }
 
 void loop() {
-    // Non-blocking character-by-character serial read
     while (Serial.available() > 0) {
         char c = (char)Serial.read();
 
         if (c == '\n' || c == '\r') {
-            // End of line – null-terminate and process
             inputBuf[bufIndex] = '\0';
             processLine(inputBuf);
             bufIndex = 0;
+        } else if (bufIndex < BUF_SIZE - 1) {
+            inputBuf[bufIndex++] = c;
         } else {
-            // Append character; guard against buffer overflow
-            if (bufIndex < BUF_SIZE - 1) {
-                inputBuf[bufIndex++] = c;
-            } else {
-                // Buffer full without a newline – discard and reset
-                Serial.println("ERR input buffer overflow, discarding line");
-                bufIndex = 0;
-            }
+            bufIndex = 0;   // overflow — reset silently
         }
     }
 }

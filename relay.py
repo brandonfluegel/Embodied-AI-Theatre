@@ -1,17 +1,18 @@
 """
 relay.py
 --------
-Local WebSocket server that receives JSON messages from a webpage
-and forwards them over a USB serial connection to an ESP32.
+WebSocket relay for the Wall-E & EVE servo pipeline.
+Receives tone-dial positions from shape-models.com/play/tone (via Tampermonkey)
+and forwards them to an ESP32 over USB serial.
 
-Requirements (install once):
+Wall-E: ch 0 = head bob | ch 1 = waist twist | ch 2 = arm
+EVE:    ch 3 = head tilt | ch 4 = body lean  | ch 5 = arm
+
+Install once:
     pip install websockets pyserial
 
-Usage:
+Run:
     python relay.py
-
-Then open your webpage and connect to:
-    ws://localhost:8765
 """
 
 import asyncio
@@ -48,10 +49,17 @@ def find_serial_port() -> str:
     return port_name
 
 
-def open_serial(port: str, baud: int) -> serial.Serial:
-    """Open and return a configured Serial connection."""
-    ser = serial.Serial(port, baud, timeout=1)
-    print(f"[serial] Opened {port} at {baud} baud.")
+def open_serial(port: str) -> serial.Serial:
+    ser = serial.Serial(
+        port,
+        BAUD_RATE,
+        timeout=0,           # non-blocking reads (we never read from the ESP32)
+        write_timeout=None,  # blocking write — tiny payload, completes in ~0.1 ms
+        xonxoff=False,
+        rtscts=False,
+        dsrdtr=False,
+    )
+    print(f"[serial] Opened {port} at {BAUD_RATE} baud.")
     return ser
 
 
@@ -62,103 +70,66 @@ async def handle_client(
     ser: serial.Serial,
 ) -> None:
     """
-    Handle a single WebSocket client.
+    Accept messages from the Tampermonkey userscript and forward to the ESP32.
 
-    Expected message format (JSON):
-        { "channel": 0, "angle": 90 }
+    Single command:   {"channel": 0, "angle": 135}
+    Batched (all 6):  [{"channel": 0, "angle": 135}, {"channel": 3, "angle": 45}, ...]
 
-    Multiple commands can be batched in a JSON array:
-        [ { "channel": 0, "angle": 45 }, { "channel": 1, "angle": 120 } ]
-
-    The relay converts each command to a compact CSV line and writes it
-    to the serial port:
-        C<channel>,<angle>\n
+    Forwarded to ESP32 as:  S<channel>:<angle>  e.g. S0:135
     """
-    client_addr = websocket.remote_address
-    print(f"[ws] Client connected: {client_addr}")
-
+    print(f"[ws] Connected: {websocket.remote_address}")
     try:
         async for raw in websocket:
             try:
                 payload = json.loads(raw)
             except json.JSONDecodeError:
-                print(f"[ws] Ignored non-JSON message: {raw!r}")
-                await websocket.send(json.dumps({"error": "invalid JSON"}))
-                continue
+                continue   # silently drop malformed messages
 
-            # Normalise to a list so batched and single commands share one path.
             commands = payload if isinstance(payload, list) else [payload]
 
             for cmd in commands:
-                channel = cmd.get("channel")
-                angle   = cmd.get("angle")
-
-                # Basic validation before touching the hardware.
-                if channel is None or angle is None:
-                    print(f"[ws] Missing fields in command: {cmd}")
-                    await websocket.send(
-                        json.dumps({"error": "missing 'channel' or 'angle'", "cmd": cmd})
-                    )
-                    continue
-
                 try:
-                    channel = int(channel)
-                    angle   = int(angle)
-                except (ValueError, TypeError):
-                    print(f"[ws] Non-integer values in command: {cmd}")
-                    await websocket.send(
-                        json.dumps({"error": "channel and angle must be integers", "cmd": cmd})
-                    )
+                    channel = int(cmd["channel"])
+                    angle   = int(cmd["angle"])
+                except (KeyError, ValueError, TypeError):
                     continue
 
-                if not (0 <= channel <= 15):
-                    await websocket.send(
-                        json.dumps({"error": "channel must be 0-15", "cmd": cmd})
-                    )
-                    continue
+                if not (0 <= channel <= 5):
+                    continue   # only channels 0-5 are wired
 
-                if not (0 <= angle <= 180):
-                    await websocket.send(
-                        json.dumps({"error": "angle must be 0-180", "cmd": cmd})
-                    )
-                    continue
+                angle = max(0, min(180, angle))   # clamp instead of dropping
 
-                # Build the serial command and send it.
-                line = f"C{channel},{angle}\n"
+                line = f"S{channel}:{angle}\n"
                 ser.write(line.encode("ascii"))
-                print(f"[serial] Sent: {line.strip()}")
-
-            await websocket.send(json.dumps({"status": "ok"}))
+                print(f"[serial] {line.strip()}")
 
     except websockets.exceptions.ConnectionClosedOK:
         pass
     except websockets.exceptions.ConnectionClosedError as exc:
-        print(f"[ws] Connection closed with error: {exc}")
+        print(f"[ws] Error: {exc}")
     finally:
-        print(f"[ws] Client disconnected: {client_addr}")
+        print(f"[ws] Disconnected: {websocket.remote_address}")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 async def main() -> None:
     port_name = SERIAL_PORT or find_serial_port()
-    ser = open_serial(port_name, BAUD_RATE)
+    ser = open_serial(port_name)
 
-    # Wrap the handler so the serial object is captured in the closure.
     async def handler(ws: websockets.ServerConnection) -> None:
         await handle_client(ws, ser)
 
-    print(f"[ws] Server starting on ws://{WS_HOST}:{WS_PORT}")
-    print("[ws] Waiting for browser connections... (Ctrl+C to stop)")
+    print(f"[ws] Listening on ws://{WS_HOST}:{WS_PORT}  (Ctrl+C to stop)")
 
-    async with websockets.serve(handler, WS_HOST, WS_PORT):
-        await asyncio.Future()  # run forever
+    async with websockets.serve(handler, WS_HOST, WS_PORT, compression=None):
+        await asyncio.Future()
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n[relay] Stopped by user.")
+        print("\n[relay] Stopped.")
     except RuntimeError as exc:
-        print(f"[relay] Fatal error: {exc}")
+        print(f"[relay] Fatal: {exc}")
