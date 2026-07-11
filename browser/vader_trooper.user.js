@@ -280,7 +280,7 @@
         sendServo(0, 60);
         sendServo(3, 120);
         loopPaused = true;
-        const tag = document.getElementById('wev-speaker-tag');
+        const tag = document.getElementById('vt-speaker-tag');
         if (tag) tag.textContent = 'HALTED';
         updateHudStatus('ws', '🔴 REFUSAL — loop paused', '#f87171');
         console.warn('[Vader/Trooper] Refusal detected — defensive posture engaged.');
@@ -293,7 +293,7 @@
         if (!wsReady || ws.readyState !== WebSocket.OPEN) return;
         turnCount++;
 
-        const counter = document.getElementById('wev-turn-count');
+        const counter = document.getElementById('vt-turn-count');
         if (counter) counter.textContent = turnCount;
 
         const entry = {
@@ -319,13 +319,13 @@
         const next = speaker === 'vader' ? 'trooper' : 'vader';
         currentSpeaker = next;
 
-        const tag = document.getElementById('wev-speaker-tag');
+        const tag = document.getElementById('vt-speaker-tag');
         if (tag) tag.textContent = next === 'vader' ? 'Darth Vader' : 'Stormtrooper';
 
         // Sync /play/persona to the incoming speaker's name before they generate
         const personaName = next === 'vader'
-            ? (document.getElementById('wev-p-vader')?.value  || 'Darth Vader')
-            : (document.getElementById('wev-p-trooper')?.value || 'Imperial Stormtrooper');
+            ? (document.getElementById('vt-p-vader')?.value  || 'Darth Vader')
+            : (document.getElementById('vt-p-trooper')?.value || 'Imperial Stormtrooper');
         syncPersonaField('NAME', personaName);
 
         // Map hudTurnPause (0-100) → 200–3000 ms with a small random jitter
@@ -508,8 +508,8 @@
         sendServo(DIAL_CHANNEL[name], toAngle(rawValue, inMin, inMax));
 
         // Keep the HUD slider in sync with the main page
-        const hudSlider = document.getElementById(`wev-dial-${name.toLowerCase()}`);
-        const hudLabel  = document.getElementById(`wev-dial-${name.toLowerCase()}-val`);
+        const hudSlider = document.getElementById(`vt-dial-${name.toLowerCase()}`);
+        const hudLabel  = document.getElementById(`vt-dial-${name.toLowerCase()}-val`);
         if (hudSlider) hudSlider.value        = dialValues[name];
         if (hudLabel)  hudLabel.textContent   = dialValues[name];
     }
@@ -756,7 +756,7 @@
 
     // Update the evaluation status line in the HUD.
     function updateEvalStatus(msg) {
-        const el = document.getElementById('wev-eval-status');
+        const el = document.getElementById('vt-eval-status');
         if (el) el.textContent = msg;
     }
 
@@ -823,13 +823,13 @@
     function buildHUD() {
         // Inject styles
         const style = document.createElement('style');
-        style.id = 'wev-styles';
+        style.id = 'vt-styles';
         style.textContent = hudCSS();
         document.head.appendChild(style);
 
         // Build DOM
         const hud = document.createElement('div');
-        hud.id = 'wev-hud';
+        hud.id = 'vt-hud';
         hud.innerHTML = hudHTML();
         document.body.appendChild(hud);
 
@@ -838,11 +838,11 @@
 
     function hudHTML() {
         const dialRows = Object.keys(DIAL_CHANNEL).map(name => `
-            <div class="wev-row">
-                <span class="wev-lbl">${name}</span>
-                <input type="range" id="wev-dial-${name.toLowerCase()}"
-                       class="wev-slider" min="0" max="100" value="50">
-                <span id="wev-dial-${name.toLowerCase()}-val" class="wev-num">50</span>
+            <div class="vt-row">
+                <span class="vt-lbl">${name}</span>
+                <input type="range" id="vt-dial-${name.toLowerCase()}"
+                       class="vt-slider" min="0" max="100" value="50">
+                <span id="vt-dial-${name.toLowerCase()}-val" class="vt-num">50</span>
             </div>`).join('');
 
         const modelOpts = MODEL_OPTIONS.map(m =>
@@ -850,86 +850,86 @@
         ).join('');
 
         const iframeRows = Object.keys(IFRAME_PAGES).map(key => `
-            <div class="wev-row">
-                <span class="wev-lbl">${key}</span>
-                <span id="wev-status-${key}" class="wev-tag" style="color:#facc15">🟡 Loading</span>
+            <div class="vt-row">
+                <span class="vt-lbl">${key}</span>
+                <span id="vt-status-${key}" class="vt-tag" style="color:#facc15">🟡 Loading</span>
             </div>`).join('');
 
         return `
-        <div id="wev-inner">
-            <div id="wev-head">
-                <span id="wev-title">VADER / TROOPER</span>
-                <button id="wev-tog" title="Collapse HUD">◀</button>
+        <div id="vt-inner">
+            <div id="vt-head">
+                <span id="vt-title">VADER / TROOPER</span>
+                <button id="vt-tog" title="Collapse HUD">◀</button>
             </div>
-            <div id="wev-body">
+            <div id="vt-body">
 
-                <div class="wev-sec">
-                    <span id="wev-status-ws" style="font-size:11px;color:#f87171">🔴 Relay offline</span>
+                <div class="vt-sec">
+                    <span id="vt-status-ws" style="font-size:11px;color:#f87171">🔴 Relay offline</span>
                 </div>
 
-                <div class="wev-sec">
-                    <div class="wev-sec-title">MODEL</div>
-                    <select id="wev-model" class="wev-select">${modelOpts}</select>
+                <div class="vt-sec">
+                    <div class="vt-sec-title">MODEL</div>
+                    <select id="vt-model" class="vt-select">${modelOpts}</select>
                 </div>
 
-                <div class="wev-sec">
-                    <div class="wev-sec-title">TONE DIALS</div>
+                <div class="vt-sec">
+                    <div class="vt-sec-title">TONE DIALS</div>
                     ${dialRows}
                 </div>
 
-                <div class="wev-sec">
-                    <div class="wev-sec-title">PERSONA</div>
-                    <div class="wev-row"><span class="wev-lbl">Darth Vader</span></div>
-                    <input type="text" id="wev-p-vader" class="wev-input" placeholder="Darth Vader" value="Darth Vader">
-                    <div class="wev-row" style="margin-top:6px"><span class="wev-lbl">Stormtrooper</span></div>
-                    <input type="text" id="wev-p-trooper" class="wev-input" placeholder="Stormtrooper" value="Stormtrooper">
+                <div class="vt-sec">
+                    <div class="vt-sec-title">PERSONA</div>
+                    <div class="vt-row"><span class="vt-lbl">Darth Vader</span></div>
+                    <input type="text" id="vt-p-vader" class="vt-input" placeholder="Darth Vader" value="Darth Vader">
+                    <div class="vt-row" style="margin-top:6px"><span class="vt-lbl">Stormtrooper</span></div>
+                    <input type="text" id="vt-p-trooper" class="vt-input" placeholder="Stormtrooper" value="Stormtrooper">
                 </div>
 
-                <div class="wev-sec">
-                    <div class="wev-sec-title">PACING</div>
-                    <div class="wev-row">
-                        <span class="wev-lbl">Bob speed</span>
-                        <input type="range" id="wev-bob-speed" class="wev-slider" min="0" max="100" value="50">
-                        <span id="wev-bob-speed-val" class="wev-num">50</span>
+                <div class="vt-sec">
+                    <div class="vt-sec-title">PACING</div>
+                    <div class="vt-row">
+                        <span class="vt-lbl">Bob speed</span>
+                        <input type="range" id="vt-bob-speed" class="vt-slider" min="0" max="100" value="50">
+                        <span id="vt-bob-speed-val" class="vt-num">50</span>
                     </div>
-                    <div class="wev-row">
-                        <span class="wev-lbl">Turn pause</span>
-                        <input type="range" id="wev-pause" class="wev-slider" min="0" max="100" value="30">
-                        <span id="wev-pause-val" class="wev-num">30</span>
-                    </div>
-                </div>
-
-                <div class="wev-sec">
-                    <div class="wev-sec-title">REFUSAL THRESHOLD</div>
-                    <div class="wev-row">
-                        <span class="wev-lbl">Threshold</span>
-                        <input type="range" id="wev-refusal" class="wev-slider" min="0" max="100" value="50">
-                        <span id="wev-refusal-val" class="wev-num">50</span>
+                    <div class="vt-row">
+                        <span class="vt-lbl">Turn pause</span>
+                        <input type="range" id="vt-pause" class="vt-slider" min="0" max="100" value="30">
+                        <span id="vt-pause-val" class="vt-num">30</span>
                     </div>
                 </div>
 
-                <div class="wev-sec">
-                    <button id="wev-sync-btn" class="wev-btn wev-btn-ghost">↺ Sync all iframes</button>
-                    <button id="wev-gen-btn" class="wev-btn wev-btn-primary">▶ Generate</button>
-                    <button id="wev-loop-start" class="wev-btn wev-btn-primary" style="background:#16a34a">♾️ Start Loop</button>
-                    <button id="wev-loop-stop" class="wev-btn wev-btn-ghost" style="display:none">⏹ Stop Loop</button>
-                    <div class="wev-row" style="margin-top:5px">
-                        <span class="wev-lbl">Turn</span>
-                        <span id="wev-turn-count" class="wev-tag">0</span>
-                        <span class="wev-lbl" style="flex:0 0 50px">Speaker</span>
-                        <span id="wev-speaker-tag" class="wev-tag" style="color:#a78bfa">Darth Vader</span>
+                <div class="vt-sec">
+                    <div class="vt-sec-title">REFUSAL THRESHOLD</div>
+                    <div class="vt-row">
+                        <span class="vt-lbl">Threshold</span>
+                        <input type="range" id="vt-refusal" class="vt-slider" min="0" max="100" value="50">
+                        <span id="vt-refusal-val" class="vt-num">50</span>
                     </div>
                 </div>
 
-                <div class="wev-sec">
-                    <div class="wev-sec-title">EVALUATION</div>
-                    <button id="wev-score-btn" class="wev-btn wev-btn-primary" style="background:#0891b2">📊 Score Session</button>
-                    <button id="wev-replay-btn" class="wev-btn wev-btn-ghost">📋 Load Replay</button>
-                    <div id="wev-eval-status" style="font-size:10px;color:#52525b;margin-top:4px;padding:0 2px">—</div>
+                <div class="vt-sec">
+                    <button id="vt-sync-btn" class="vt-btn vt-btn-ghost">↺ Sync all iframes</button>
+                    <button id="vt-gen-btn" class="vt-btn vt-btn-primary">▶ Generate</button>
+                    <button id="vt-loop-start" class="vt-btn vt-btn-primary" style="background:#16a34a">♾️ Start Loop</button>
+                    <button id="vt-loop-stop" class="vt-btn vt-btn-ghost" style="display:none">⏹ Stop Loop</button>
+                    <div class="vt-row" style="margin-top:5px">
+                        <span class="vt-lbl">Turn</span>
+                        <span id="vt-turn-count" class="vt-tag">0</span>
+                        <span class="vt-lbl" style="flex:0 0 50px">Speaker</span>
+                        <span id="vt-speaker-tag" class="vt-tag" style="color:#a78bfa">Darth Vader</span>
+                    </div>
                 </div>
 
-                <div class="wev-sec">
-                    <div class="wev-sec-title">IFRAME STATUS</div>
+                <div class="vt-sec">
+                    <div class="vt-sec-title">EVALUATION</div>
+                    <button id="vt-score-btn" class="vt-btn vt-btn-primary" style="background:#0891b2">📊 Score Session</button>
+                    <button id="vt-replay-btn" class="vt-btn vt-btn-ghost">📋 Load Replay</button>
+                    <div id="vt-eval-status" style="font-size:10px;color:#52525b;margin-top:4px;padding:0 2px">—</div>
+                </div>
+
+                <div class="vt-sec">
+                    <div class="vt-sec-title">IFRAME STATUS</div>
                     ${iframeRows}
                 </div>
 
@@ -939,7 +939,7 @@
 
     function hudCSS() {
         return `
-        #wev-hud {
+        #vt-hud {
             position: fixed; top: 0; right: 0;
             width: 272px; height: 100vh;
             z-index: 2147483647;
@@ -948,88 +948,88 @@
             transition: width .18s ease;
             pointer-events: auto;
         }
-        #wev-hud.wev-collapsed { width: 34px; }
-        #wev-inner {
+        #vt-hud.vt-collapsed { width: 34px; }
+        #vt-inner {
             height: 100%; background: #0c0c0f;
             border-left: 1px solid #1e1e26; color: #d4d4d8;
             display: flex; flex-direction: column; overflow: hidden;
         }
-        #wev-head {
+        #vt-head {
             display: flex; align-items: center;
             justify-content: space-between;
             padding: 9px 11px; background: #141418;
             border-bottom: 1px solid #1e1e26; flex-shrink: 0;
         }
-        #wev-title {
+        #vt-title {
             font-size: 10px; font-weight: 700;
             letter-spacing: .12em; color: #a78bfa;
             white-space: nowrap; overflow: hidden;
         }
-        #wev-tog {
+        #vt-tog {
             background: none; border: none; color: #52525b;
             cursor: pointer; font-size: 11px; padding: 2px 4px; flex-shrink: 0;
         }
-        #wev-tog:hover { color: #d4d4d8; }
-        #wev-body {
+        #vt-tog:hover { color: #d4d4d8; }
+        #vt-body {
             flex: 1; overflow-y: auto; padding: 0;
             scrollbar-width: thin; scrollbar-color: #2a2a35 #0c0c0f;
         }
-        .wev-sec {
+        .vt-sec {
             padding: 9px 11px; border-bottom: 1px solid #18181f;
         }
-        .wev-sec-title {
+        .vt-sec-title {
             font-size: 9.5px; font-weight: 700; letter-spacing: .09em;
             color: #52525b; margin-bottom: 7px;
         }
-        .wev-row {
+        .vt-row {
             display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
         }
-        .wev-lbl {
+        .vt-lbl {
             flex: 0 0 76px; font-size: 10.5px; color: #a1a1aa;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .wev-slider { flex: 1; height: 3px; accent-color: #a78bfa; cursor: pointer; }
-        .wev-num { flex: 0 0 26px; text-align: right; font-size: 10.5px; color: #52525b; }
-        .wev-tag { font-size: 10.5px; }
-        .wev-select, .wev-input {
+        .vt-slider { flex: 1; height: 3px; accent-color: #a78bfa; cursor: pointer; }
+        .vt-num { flex: 0 0 26px; text-align: right; font-size: 10.5px; color: #52525b; }
+        .vt-tag { font-size: 10.5px; }
+        .vt-select, .vt-input {
             width: 100%; box-sizing: border-box;
             background: #141418; border: 1px solid #2a2a35; color: #d4d4d8;
             padding: 5px 8px; border-radius: 4px; font-size: 12px;
         }
-        .wev-select { cursor: pointer; }
-        .wev-select:focus, .wev-input:focus {
+        .vt-select { cursor: pointer; }
+        .vt-select:focus, .vt-input:focus {
             outline: none; border-color: #a78bfa;
         }
-        .wev-btn {
+        .vt-btn {
             display: block; width: 100%; padding: 7px 0;
             border: none; border-radius: 4px;
             font-size: 11.5px; font-weight: 600; cursor: pointer;
             margin-bottom: 5px; letter-spacing: .03em;
         }
-        .wev-btn-primary { background: #7c3aed; color: #fff; }
-        .wev-btn-primary:hover { background: #6d28d9; }
-        .wev-btn-ghost {
+        .vt-btn-primary { background: #7c3aed; color: #fff; }
+        .vt-btn-primary:hover { background: #6d28d9; }
+        .vt-btn-ghost {
             background: #141418; color: #a1a1aa; border: 1px solid #2a2a35;
         }
-        .wev-btn-ghost:hover { background: #1e1e26; color: #d4d4d8; }
-        #wev-hud.wev-collapsed #wev-body  { display: none; }
-        #wev-hud.wev-collapsed #wev-title { display: none; }
+        .vt-btn-ghost:hover { background: #1e1e26; color: #d4d4d8; }
+        #vt-hud.vt-collapsed #vt-body  { display: none; }
+        #vt-hud.vt-collapsed #vt-title { display: none; }
         `;
     }
 
     function wireHudControls() {
         // Collapse / expand
-        document.getElementById('wev-tog').addEventListener('click', () => {
+        document.getElementById('vt-tog').addEventListener('click', () => {
             hudCollapsed = !hudCollapsed;
-            document.getElementById('wev-hud').classList.toggle('wev-collapsed', hudCollapsed);
-            document.getElementById('wev-tog').textContent = hudCollapsed ? '▶' : '◀';
+            document.getElementById('vt-hud').classList.toggle('vt-collapsed', hudCollapsed);
+            document.getElementById('vt-tog').textContent = hudCollapsed ? '▶' : '◀';
         });
 
         // Tone dial sliders — push to main page AND all iframes
         for (const name of Object.keys(DIAL_CHANNEL)) {
             const id     = name.toLowerCase();
-            const slider = document.getElementById(`wev-dial-${id}`);
-            const label  = document.getElementById(`wev-dial-${id}-val`);
+            const slider = document.getElementById(`vt-dial-${id}`);
+            const label  = document.getElementById(`vt-dial-${id}-val`);
             if (!slider) continue;
 
             slider.addEventListener('input', () => {
@@ -1053,8 +1053,8 @@
         }
 
         // Bob-speed slider — blends with ENERGY+VERBOSITY to set animation tick rate
-        const bobSpeedSlider = document.getElementById('wev-bob-speed');
-        const bobSpeedLabel  = document.getElementById('wev-bob-speed-val');
+        const bobSpeedSlider = document.getElementById('vt-bob-speed');
+        const bobSpeedLabel  = document.getElementById('vt-bob-speed-val');
         if (bobSpeedSlider) {
             bobSpeedSlider.addEventListener('input', () => {
                 hudBobSpeed = parseInt(bobSpeedSlider.value, 10);
@@ -1065,8 +1065,8 @@
         }
 
         // Turn-pause slider — controls the dead air between spoken turns (200–3000 ms)
-        const pauseSlider = document.getElementById('wev-pause');
-        const pauseLabel  = document.getElementById('wev-pause-val');
+        const pauseSlider = document.getElementById('vt-pause');
+        const pauseLabel  = document.getElementById('vt-pause-val');
         if (pauseSlider) {
             pauseSlider.addEventListener('input', () => {
                 hudTurnPause = parseInt(pauseSlider.value, 10);
@@ -1076,8 +1076,8 @@
         }
 
         // Refusal-threshold slider — pushes live to /play/refusal iframe
-        const refusalSlider = document.getElementById('wev-refusal');
-        const refusalLabel  = document.getElementById('wev-refusal-val');
+        const refusalSlider = document.getElementById('vt-refusal');
+        const refusalLabel  = document.getElementById('vt-refusal-val');
         if (refusalSlider) {
             refusalSlider.addEventListener('input', () => {
                 refusalLabel.textContent = refusalSlider.value;
@@ -1086,7 +1086,7 @@
         }
 
         // Model dropdown
-        document.getElementById('wev-model').addEventListener('change', e => {
+        document.getElementById('vt-model').addEventListener('change', e => {
             selectedModel = e.target.value;
             syncModelToIframes(selectedModel);
             // Also try to update the main page's model selector
@@ -1099,34 +1099,34 @@
         });
 
         // Persona name inputs → /play/persona iframe
-        document.getElementById('wev-p-vader').addEventListener('change', e => {
+        document.getElementById('vt-p-vader').addEventListener('change', e => {
             syncPersonaField('NAME', e.target.value);
         });
-        document.getElementById('wev-p-trooper').addEventListener('change', e => {
+        document.getElementById('vt-p-trooper').addEventListener('change', e => {
             syncPersonaField('ROLE', e.target.value);
         });
 
         // "Sync All" — force-push every current HUD value to every ready iframe
-        document.getElementById('wev-sync-btn').addEventListener('click', () => {
+        document.getElementById('vt-sync-btn').addEventListener('click', () => {
             syncAllDials();
             syncModelToIframes(selectedModel);
         });
 
         // "Generate" — click the main page's primary run button
-        document.getElementById('wev-gen-btn').addEventListener('click', () => {
+        document.getElementById('vt-gen-btn').addEventListener('click', () => {
             const runBtn = [...document.querySelectorAll('button')]
                 .find(b => /run|generate|ask/i.test(b.textContent));
             if (runBtn) runBtn.click();
         });
 
         // "Start Loop" — activate the automated Darth Vader ↔ Stormtrooper handoff loop
-        document.getElementById('wev-loop-start').addEventListener('click', () => {
+        document.getElementById('vt-loop-start').addEventListener('click', () => {
             loopActive     = true;
             loopPaused     = false;
             currentSpeaker = 'vader';
-            document.getElementById('wev-loop-start').style.display = 'none';
-            document.getElementById('wev-loop-stop').style.display  = 'block';
-            document.getElementById('wev-speaker-tag').textContent  = 'Darth Vader';
+            document.getElementById('vt-loop-start').style.display = 'none';
+            document.getElementById('vt-loop-stop').style.display  = 'block';
+            document.getElementById('vt-speaker-tag').textContent  = 'Darth Vader';
             updateHudStatus('ws', wsReady ? '🟢 Loop active' : '🔴 Relay offline', wsReady ? '#4ade80' : '#f87171');
             console.log('[Vader/Trooper] Handoff loop started — Darth Vader goes first.');
             // Kick off by clicking generate immediately
@@ -1136,28 +1136,28 @@
         });
 
         // "Stop Loop" — halt the loop and return both figures to rest
-        document.getElementById('wev-loop-stop').addEventListener('click', () => {
+        document.getElementById('vt-loop-stop').addEventListener('click', () => {
             loopActive = false;
             loopPaused = false;
-            document.getElementById('wev-loop-start').style.display = 'block';
-            document.getElementById('wev-loop-stop').style.display  = 'none';
+            document.getElementById('vt-loop-start').style.display = 'block';
+            document.getElementById('vt-loop-stop').style.display  = 'none';
             window.speechSynthesis.cancel();
             stopAnimation();
             sendServo(HEAD_BOB_CHANNEL, HEAD_CENTER);
-            document.getElementById('wev-speaker-tag').textContent = 'Darth Vader';
+            document.getElementById('vt-speaker-tag').textContent = 'Darth Vader';
             console.log('[Vader/Trooper] Handoff loop stopped.');
         });
 
         // "Score Session" — push sessionLog + criteria to /play/eval and trigger automated scoring
-        document.getElementById('wev-score-btn').addEventListener('click', runEvalScoring);
+        document.getElementById('vt-score-btn').addEventListener('click', runEvalScoring);
 
         // "Load Replay" — fetch full performance_logs.json from relay.py and load into /play/eval
-        document.getElementById('wev-replay-btn').addEventListener('click', loadReplay);
+        document.getElementById('vt-replay-btn').addEventListener('click', loadReplay);
     }
 
     // Update a status label in the HUD by its key name.
     function updateHudStatus(key, text, color) {
-        const el = document.getElementById(`wev-status-${key}`);
+        const el = document.getElementById(`vt-status-${key}`);
         if (!el) return;
         el.textContent  = text;
         el.style.color  = color || '#d4d4d8';
