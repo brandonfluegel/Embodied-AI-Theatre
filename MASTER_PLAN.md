@@ -1,5 +1,5 @@
 # MASTER PLAN
-## Wall-E & EVE — Autonomous Physical-Digital AI Theatre
+## Darth Vader & Imperial Stormtrooper — Autonomous Physical-Digital AI Theatre
 ### Architectural Blueprint & Source of Truth
 ### Current Version: v3.0.0 — Single-Tab Matrix Interface
 
@@ -7,7 +7,7 @@
 
 ## 1. Overall Vision
 
-We are building an autonomous, closed-loop, physical-digital AI theatre that runs on a desktop. The project breaks the glass screen of traditional AI chatbots by giving two digital personas — Wall-E and EVE — physical forms, voices, and coordinated bodily gestures.
+We are building an autonomous, closed-loop, physical-digital AI theatre that runs on a desktop. The project breaks the glass screen of traditional AI chatbots by giving two digital personas — Darth Vader and an Imperial Stormtrooper — physical forms, voices, and coordinated bodily gestures.
 
 The two characters engage in real-time, hands-free spoken debates. The text output of one agent automatically becomes the prompt for the other, creating a self-sustaining conversational loop. The entire pipeline — from language model output, to synthesized speech, to servo-driven physical movement — runs without human intervention once started.
 
@@ -22,16 +22,16 @@ The two characters engage in real-time, hands-free spoken debates. The text outp
 
 ## 2. Toy Specifications & Scale
 
-| Property | Wall-E (Character A) | EVE (Character B) |
+| Property | Darth Vader (Character A) | Imperial Stormtrooper (Character B) |
 |---|---|---|
-| Manufacturer | Mattel Disney-Pixar | Mattel Disney-Pixar |
-| Height | ~3.5 inches | ~4.25 inches |
-| Width | ~3.0 inches | ~2.5 inches |
-| Depth | ~3.0 inches | ~2.0 inches |
-| Frame type | Pre-molded loose ball joints | Hollow egg-shaped capsule |
-| Tendon routing | Through joint gaps and base holes | Through hollow interior and base holes |
+| Manufacturer | Hasbro | Hasbro |
+| Product line | Star Wars The Black Series (6-inch, 1/12 scale) | Star Wars The Black Series (6-inch, 1/12 scale) |
+| Height | ~6 inches (~15 cm) | ~6 inches (~15 cm) |
+| Weight | ~100 g (0.1 kg) | ~110 g |
+| Frame type | Highly articulated plastic body with standard joint hinges | Highly articulated plastic body with standard joint hinges |
+| Tendon routing | Anchored to plastic joint hinges, routed down through stage base | Anchored to plastic joint hinges, routed down through stage base |
 
-**Key mechanical implication:** Wall-E's pre-molded ball joints give natural pivot points for tendon attachment. EVE's hollow capsule shell provides a clean internal channel for routing fishing line from the servo arm to her limbs with no visible hardware.
+**Key mechanical implication:** Both Black Series figures feature built-in mechanical pivot pins at the neck, shoulders, and torso. Tendon lines must be tied directly to these plastic joint hinges rather than threaded through a hollow shell. Lines are then routed down from each hinge, through the display stage base, and anchored to the servo motor arms hidden beneath the deck.
 
 ---
 
@@ -43,25 +43,25 @@ To achieve lifelike body expression without adding excessive weight inside the t
 
 | Channel | Character | Joint | Gesture |
 |---|---|---|---|
-| 0 | Wall-E | Head | Up/down bobbing — creates syllable speech illusion |
-| 1 | Wall-E | Waist | Left/right twist — full torso rotation |
-| 2 | Wall-E | Arm | Tendon pull — lifts arm for emphasis |
-| 3 | EVE | Head | Side tilt — attentive listening and reaction |
-| 4 | EVE | Body | Forward/back lean — body-lean engagement mechanism |
-| 5 | EVE | Arm | Tendon pull — actuates arm for gesture |
+| 0 | Darth Vader | Head | Up/down move — creates syllable speech illusion |
+| 1 | Darth Vader | Torso | Left/right twist — full torso rotation |
+| 2 | Darth Vader | Arm | Tendon pull — dramatic gesture for emphasis |
+| 3 | Imperial Stormtrooper | Head | Side-to-side turn — attentive reaction and listening |
+| 4 | Imperial Stormtrooper | Torso | Forward/back lean — engagement and body language |
+| 5 | Imperial Stormtrooper | Arm | Tendon pull — blaster hand raise or pointing motion |
 
 ### Tendon Mechanics
 
-Servo channels 2 and 5 use a hidden tendon system rather than a rigid linkage:
+Servo channels 2 and 5 use a hidden tendon system rather than a rigid linkage. Because the Black Series figures are heavier than smaller toy models (100 g and 110 g respectively), the MG90S servos will operate closer to their maximum torque rating when pulling limbs against gravity. Keep line routing as direct as possible to minimise friction losses.
 
-- Clear nylon fishing line is tied directly to the target limb
-- The line is routed invisibly down through the hollow toy body
-- The line passes through a small drilled hole in the underside of the display stage base
+- Clear nylon fishing line is tied to the plastic joint hinge at the target limb
+- The line is routed down the outside of the figure, pressed flat against the back
+- It passes through a small drilled hole in the underside of the display stage base
 - The other end is anchored to the servo motor arm hidden beneath the stage deck
-- When the servo rotates, it winds or releases the line, lifting or lowering the limb
+- When the servo rotates, it winds the line and pulls the limb upward
 - A return spring or gravity resets the limb when tension is released
 
-This approach keeps all hardware completely out of sight and adds no visible mass to the figures.
+This approach keeps all electronics completely out of sight beneath the stage while using the figures' own articulation hinges as the mechanical interface point.
 
 ---
 
@@ -84,11 +84,11 @@ Two dial parameters shape the utterance in real time before each sentence is spo
 | ENERGY | Speech rate | 0.75 (slow) → 1.40 (rapid) |
 | WARMTH | Pitch | 0.85 (low) → 1.15 (warm) |
 
-The interaction operates as a **closed-loop automated theatre**. When the active utterance fires its `onend` event, the userscript copies the completed text block, programmatically inputs it into the opposing character's prompt window, and triggers the next generation phase. The debate alternates between Wall-E and EVE indefinitely without any manual user action.
+The interaction operates as a **closed-loop automated theatre**. When the active utterance fires its `onend` event, the userscript copies the completed text block, programmatically inputs it into the opposing character's prompt window, and triggers the next generation phase. The debate alternates between Darth Vader and the Imperial Stormtrooper indefinitely without any manual user action.
 
 ### Stage 3 — Syllable-Synchronized Mechanical Bursts
 
-Physical movement is dynamically coupled to active speech synthesis. The moment `utterance.onstart` fires, a high-frequency animation loop begins inside the userscript. On every tick it sends an oscillating positional command to `ws://localhost:8765` on **Channel 0** (Wall-E's head servo), alternating between **100°** and **80°** around the 90° neutral center.
+Physical movement is dynamically coupled to active speech synthesis. The moment `utterance.onstart` fires, a high-frequency animation loop begins inside the userscript. On every tick it sends an oscillating positional command to `ws://localhost:8765` on **Channel 0** (Darth Vader's head servo), alternating between **100°** and **80°** around the 90° neutral center.
 
 The tick interval is computed from the live ENERGY and VERBOSITY dial values:
 
@@ -97,7 +97,7 @@ driver = (ENERGY + VERBOSITY) / 2        // 0-100
 interval_ms = 200 - (driver / 100) × 150  // 200 ms (slow) → 50 ms (fast)
 ```
 
-The moment `utterance.onend` fires, `clearInterval` terminates the loop instantly and a final `S0:90` command snaps Wall-E's head back to the neutral resting position. No servo motion persists between spoken turns.
+The moment `utterance.onend` fires, `clearInterval` terminates the loop instantly and a final `S0:90` command snaps Darth Vader's head back to the neutral resting position. No servo motion persists between spoken turns.
 
 ### Conversation Handoff Flow
 
@@ -124,8 +124,8 @@ The /play/refusal playground lets you define boundary phrases — words or patte
 1. The running `speechSynthesis` utterance is immediately cancelled
 2. All servo animation intervals are cleared
 3. A defensive posture command sequence fires over the WebSocket:
-   - Channel 0 drops to 60° — Wall-E bows his head down
-   - Channel 3 tilts to 120° — EVE turns her head away
+   - Channel 0 drops to 60° — Darth Vader bows his head down ominously
+   - Channel 3 tilts to 120° — the Stormtrooper snaps his head to a defensive stance
 4. Both postures hold until the user resumes the session or a configurable timeout clears them
 
 This gives the live performance a visually dramatic physical reaction to sensitive content, reinforcing the character boundaries in a way the audience can see and feel.
@@ -137,7 +137,7 @@ Every completed spoken turn is written to `server/performance_logs.json` by the 
 | Field | Description |
 |---|---|
 | `timestamp` | ISO 8601 time of the completed turn |
-| `speaker` | `"wall-e"` or `"eve"` |
+| `speaker` | `"vader"` or `"trooper"` |
 | `text` | The full spoken text block |
 | `char_count` | Character length of the text |
 | `turn_number` | Sequential turn index in the current session |
@@ -165,12 +165,12 @@ The stored 0–100 values are then read continuously by the speech engine and th
 
 | Dial | Servo channel | Normalized value drives |
 |---|---|---|
-| WARMTH | ch 0 Wall-E head | Voice pitch (0.85 → 1.15) |
-| VERBOSITY | ch 1 Wall-E waist | Head-bob animation density (contributes 50 % to tick interval) |
-| ENERGY | ch 2 Wall-E arm | Speech rate (0.75 → 1.40) + head-bob speed (contributes 50 % to tick interval) |
-| DIRECTNESS | ch 3 EVE head | Language sharpness (affects language model prompt) |
-| CONCRETENESS | ch 4 EVE body | Specificity of AI output (affects language model prompt) |
-| STRUCTURE | ch 5 EVE arm | Prose vs. formatted output (affects language model prompt) |
+| WARMTH | ch 0 Darth Vader head | Voice pitch (0.85 → 1.15) |
+| VERBOSITY | ch 1 Darth Vader torso | Head-bob animation density (contributes 50 % to tick interval) |
+| ENERGY | ch 2 Darth Vader arm | Speech rate (0.75 → 1.40) + head-bob speed (contributes 50 % to tick interval) |
+| DIRECTNESS | ch 3 Stormtrooper head | Language sharpness (affects language model prompt) |
+| CONCRETENESS | ch 4 Stormtrooper torso | Specificity of AI output (affects language model prompt) |
+| STRUCTURE | ch 5 Stormtrooper arm | Prose vs. formatted output (affects language model prompt) |
 
 ### Energy and Verbosity as Animation Speed Controllers
 
@@ -197,7 +197,7 @@ The HUD is a fixed-position panel, 272 px wide, anchored to the right edge of th
 |---|---|
 | Model Selection | Syncs the chosen AI model to all five background iframes simultaneously |
 | Tone Dials | Six sliders mirroring the main page dials; changes push to main page AND all iframes |
-| Persona | Wall-E and EVE name fields; pushes to the /play/persona iframe's NAME and ROLE inputs |
+| Persona | Darth Vader and Stormtrooper name fields; pushes to the /play/persona iframe's NAME and ROLE inputs |
 | Pacing | Bob speed and Turn pause sliders for future choreography timing control |
 | Refusal Threshold | Slider targeted at the /play/refusal iframe's boundary configuration |
 | Iframe Status | Live 🟢/🟡/🔴 indicator for each of the five background iframes |
@@ -287,12 +287,12 @@ ThinkPad (USB)
             │
             └── PCA9685
                     │
-                    ├── CH 0 ── Wall-E head bob servo
-                    ├── CH 1 ── Wall-E waist twist servo
-                    ├── CH 2 ── Wall-E arm tendon servo
-                    ├── CH 3 ── EVE head tilt servo
-                    ├── CH 4 ── EVE body lean servo
-                    └── CH 5 ── EVE arm tendon servo
+                    ├── CH 0 ── Darth Vader head servo
+                    ├── CH 1 ── Darth Vader torso twist servo
+                    ├── CH 2 ── Darth Vader arm tendon servo
+                    ├── CH 3 ── Stormtrooper head servo
+                    ├── CH 4 ── Stormtrooper torso lean servo
+                    └── CH 5 ── Stormtrooper arm tendon servo
 
 5V/3A Wall Adapter ── PCA9685 V+ power rail (isolated from ThinkPad logic)
 ```
@@ -316,10 +316,10 @@ The 5 V / 3 A wall adapter feeds **only the PCA9685 V+ terminal rail**. The six 
 S<channel>:<angle>\n
 
 Examples:
-  S0:90    →  Wall-E head to center
-  S0:110   →  Wall-E head nod forward
-  S3:60    →  EVE head tilt left
-  S5:135   →  EVE arm raise
+  S0:90    →  Darth Vader head to center
+  S0:110   →  Darth Vader head nod forward
+  S3:60    →  Stormtrooper head turn
+  S5:135   →  Stormtrooper arm raise
 ```
 
 Angles are clamped to 0–180°. Only channels 0–5 are accepted by the firmware. All other channels are silently ignored.
@@ -336,7 +336,7 @@ RobotProject/
 ├── .gitignore
 │
 ├── browser/
-│   └── wall_e_eve.user.js              ← v3.0.0 unified matrix userscript
+│   └── vader_trooper.user.js           ← v3.2.0 unified matrix userscript
 │
 ├── server/
 │   ├── relay.py                        ← Python WebSocket server + serial relay
@@ -369,7 +369,7 @@ RobotProject/
 ### Phase 1 — Digital Pipeline (software only)
 - [x] `relay.py` — WebSocket server receives dial data, forwards to ESP32 via serial
 - [x] `esp32_servo_controller.ino` — ESP32 firmware parses `S<ch>:<angle>` commands
-- [x] `wall_e_eve.user.js` — Tampermonkey userscript binds to tone dials on shape-models.com
+- [x] `vader_trooper.user.js` — Tampermonkey userscript binds to tone dials on shape-models.com
 
 ### Phase 2 — Speech & Loop (browser automation)
 - [x] Web Speech API voice synthesis integrated into userscript
@@ -381,11 +381,11 @@ RobotProject/
 - [x] React-compatible native prototype value sync from HUD to all iframes
 - [x] Refusal trigger pattern matching → defensive posture servo commands (ch 0 → 60°, ch 3 → 120°)
 - [x] Telemetry logging in `relay.py` → `server/performance_logs.json` (NDJSON, append-only)
-- [x] Automatic conversation handoff — Wall-E ↔ EVE loop with 800–1200 ms natural pause
+- [x] Automatic conversation handoff — Darth Vader ↔ Stormtrooper loop with 800–1200 ms natural pause
 
 ### Phase 3 — Physical Build (hardware)
 - [ ] Stage base constructed with servo mounting positions
-- [ ] Tendon lines routed through both toy bodies
+- [ ] Tendon lines anchored to Black Series joint hinges and routed through stage base
 - [ ] All 6 servos wired to PCA9685 and tested independently
 - [ ] Power supply isolated and verified safe
 
@@ -401,4 +401,4 @@ RobotProject/
 
 ---
 
-*Last updated: 2026-07-10 — v3.1.0 software pipeline complete. Phases 1 & 2 fully checked off. Awaiting hardware for Phase 3.*
+*Last updated: 2026-07-11 — Characters swapped to Hasbro Star Wars The Black Series: Darth Vader (Character A) and Imperial Stormtrooper (Character B). All mechanical, dialogue, and telemetry references updated.*

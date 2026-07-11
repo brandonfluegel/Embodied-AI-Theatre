@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Wall-E & EVE Master Control Matrix
+// @name         Vader & Trooper Master Control Matrix
 // @namespace    robotproject.local
-// @version      3.1.0
+// @version      3.2.0
 // @description  Floating HUD + same-origin hidden iframe matrix for full shape-models.com pipeline control from /play/tone
 // @author       RobotProject
 // @match        https://www.shape-models.com/play/tone
@@ -38,7 +38,7 @@
   ------------
   MODEL       — picks the AI model; syncs to all iframes
   TONE DIALS  — six dials; mirrors the main page + pushes to iframes
-  PERSONA     — Wall-E and EVE name fields → /play/persona iframe
+  PERSONA     — Darth Vader and Stormtrooper name fields → /play/persona iframe
   PACING      — bob speed and turn-pause sliders (drive animation timing)
   REFUSAL     — threshold slider → /play/refusal iframe
   IFRAMES     — live status dot for each background iframe
@@ -74,7 +74,7 @@
         'Claude 3.5 Sonnet',
     ];
 
-    // Tone dial → servo channel (Wall-E ch 0-2, EVE ch 3-5)
+    // Tone dial → servo channel (Vader ch 0-2, Trooper ch 3-5)
     const DIAL_CHANNEL = {
         WARMTH:       0,
         VERBOSITY:    1,
@@ -128,7 +128,7 @@
 
     let selectedModel  = MODEL_OPTIONS[0];
     let hudCollapsed   = false;
-    let currentSpeaker = 'walle';   // 'walle' or 'eve' — whose turn is active
+    let currentSpeaker = 'vader';   // 'vader' or 'trooper' — whose turn is active
     let turnCount      = 0;         // increments on each cleanly completed turn
     let loopActive     = false;     // true while the auto-handoff loop is running
     let loopPaused     = false;     // true while held in defensive posture
@@ -242,7 +242,7 @@
     }
 
     // Immediately halt everything and freeze both figures in a boundary posture.
-    // Wall-E bows his head (ch 0 → 60°) and EVE turns away (ch 3 → 120°).
+    // Darth Vader bows his head (ch 0 → 60°) and the Stormtrooper turns away (ch 3 → 120°).
     function triggerDefensivePosture() {
         window.speechSynthesis.cancel();
         stopAnimation();
@@ -252,7 +252,7 @@
         const tag = document.getElementById('wev-speaker-tag');
         if (tag) tag.textContent = 'HALTED';
         updateHudStatus('ws', '🔴 REFUSAL — loop paused', '#f87171');
-        console.warn('[Wall-E/EVE] Refusal detected — defensive posture engaged.');
+        console.warn('[Vader/Trooper] Refusal detected — defensive posture engaged.');
     }
 
     // ── Telemetry ────────────────────────────────────────────────
@@ -282,11 +282,11 @@
     // pause, paste the completed text into the main page prompt, then click
     // the generate button so the opposing character responds automatically.
     function scheduleHandoff(completedText, speaker) {
-        const next = speaker === 'walle' ? 'eve' : 'walle';
+        const next = speaker === 'vader' ? 'trooper' : 'vader';
         currentSpeaker = next;
 
         const tag = document.getElementById('wev-speaker-tag');
-        if (tag) tag.textContent = next === 'walle' ? 'Wall-E' : 'EVE';
+        if (tag) tag.textContent = next === 'vader' ? 'Darth Vader' : 'Stormtrooper';
 
         const pauseMs = 800 + Math.floor(Math.random() * 400);   // 800–1200 ms
 
@@ -301,7 +301,7 @@
             if (promptEl) {
                 setReactValue(promptEl, completedText, window);
             } else {
-                console.warn('[Wall-E/EVE] Handoff: prompt input not found.');
+                console.warn('[Vader/Trooper] Handoff: prompt input not found.');
             }
 
             const runBtn = [...document.querySelectorAll('button')]
@@ -309,9 +309,9 @@
 
             if (runBtn) {
                 fireClick(runBtn, window);
-                console.log(`[Wall-E/EVE] Handoff → ${next}, turn ${turnCount + 1}`);
+                console.log(`[Vader/Trooper] Handoff → ${next}, turn ${turnCount + 1}`);
             } else {
-                console.warn('[Wall-E/EVE] Handoff: generate button not found.');
+                console.warn('[Vader/Trooper] Handoff: generate button not found.');
             }
         }, pauseMs);
     }
@@ -325,7 +325,7 @@
             || voices[0] || null;
     }
 
-    // speaker is 'walle' or 'eve' — used for telemetry and handoff routing.
+    // speaker is 'vader' or 'trooper' — used for telemetry and handoff routing.
     function speakText(text, speaker) {
         if (!window.speechSynthesis) return;
         window.speechSynthesis.cancel();
@@ -380,7 +380,7 @@
             if (!final || final.length <= 10 || final === lastSpokenText) return;
 
             lastSpokenText = final;
-            console.log('[Wall-E/EVE] Stream complete →', final.slice(0, 60) + '…');
+            console.log('[Vader/Trooper] Stream complete →', final.slice(0, 60) + '…');
 
             // Check for AI refusal patterns before entering speech pipeline
             if (isRefusal(final)) {
@@ -415,7 +415,7 @@
         outputObserver.observe(outputContainer, {
             childList: true, subtree: true, characterData: true,
         });
-        console.log('[Wall-E/EVE] Output observer attached to main page.');
+        console.log('[Vader/Trooper] Output observer attached to main page.');
     }
 
     // ── Tone dial binding (main page) ─────────────────────────────
@@ -690,7 +690,7 @@
         return `
         <div id="wev-inner">
             <div id="wev-head">
-                <span id="wev-title">WALL-E / EVE</span>
+                <span id="wev-title">VADER / TROOPER</span>
                 <button id="wev-tog" title="Collapse HUD">◀</button>
             </div>
             <div id="wev-body">
@@ -711,10 +711,10 @@
 
                 <div class="wev-sec">
                     <div class="wev-sec-title">PERSONA</div>
-                    <div class="wev-row"><span class="wev-lbl">Wall-E</span></div>
-                    <input type="text" id="wev-p-walle" class="wev-input" placeholder="Wall-E" value="Wall-E">
-                    <div class="wev-row" style="margin-top:6px"><span class="wev-lbl">EVE</span></div>
-                    <input type="text" id="wev-p-eve" class="wev-input" placeholder="EVE" value="EVE">
+                    <div class="wev-row"><span class="wev-lbl">Darth Vader</span></div>
+                    <input type="text" id="wev-p-vader" class="wev-input" placeholder="Darth Vader" value="Darth Vader">
+                    <div class="wev-row" style="margin-top:6px"><span class="wev-lbl">Stormtrooper</span></div>
+                    <input type="text" id="wev-p-trooper" class="wev-input" placeholder="Stormtrooper" value="Stormtrooper">
                 </div>
 
                 <div class="wev-sec">
@@ -749,7 +749,7 @@
                         <span class="wev-lbl">Turn</span>
                         <span id="wev-turn-count" class="wev-tag">0</span>
                         <span class="wev-lbl" style="flex:0 0 50px">Speaker</span>
-                        <span id="wev-speaker-tag" class="wev-tag" style="color:#a78bfa">Wall-E</span>
+                        <span id="wev-speaker-tag" class="wev-tag" style="color:#a78bfa">Darth Vader</span>
                     </div>
                 </div>
 
@@ -898,10 +898,10 @@
         });
 
         // Persona name inputs → /play/persona iframe
-        document.getElementById('wev-p-walle').addEventListener('change', e => {
+        document.getElementById('wev-p-vader').addEventListener('change', e => {
             syncPersonaField('NAME', e.target.value);
         });
-        document.getElementById('wev-p-eve').addEventListener('change', e => {
+        document.getElementById('wev-p-trooper').addEventListener('change', e => {
             syncPersonaField('ROLE', e.target.value);
         });
 
@@ -918,16 +918,16 @@
             if (runBtn) runBtn.click();
         });
 
-        // "Start Loop" — activate the automated Wall-E ↔ EVE handoff loop
+        // "Start Loop" — activate the automated Darth Vader ↔ Stormtrooper handoff loop
         document.getElementById('wev-loop-start').addEventListener('click', () => {
             loopActive     = true;
             loopPaused     = false;
-            currentSpeaker = 'walle';
+            currentSpeaker = 'vader';
             document.getElementById('wev-loop-start').style.display = 'none';
             document.getElementById('wev-loop-stop').style.display  = 'block';
-            document.getElementById('wev-speaker-tag').textContent  = 'Wall-E';
+            document.getElementById('wev-speaker-tag').textContent  = 'Darth Vader';
             updateHudStatus('ws', wsReady ? '🟢 Loop active' : '🔴 Relay offline', wsReady ? '#4ade80' : '#f87171');
-            console.log('[Wall-E/EVE] Handoff loop started — Wall-E goes first.');
+            console.log('[Vader/Trooper] Handoff loop started — Darth Vader goes first.');
             // Kick off by clicking generate immediately
             const runBtn = [...document.querySelectorAll('button')]
                 .find(b => /run|generate|ask/i.test(b.textContent));
@@ -943,8 +943,8 @@
             window.speechSynthesis.cancel();
             stopAnimation();
             sendServo(HEAD_BOB_CHANNEL, HEAD_CENTER);
-            document.getElementById('wev-speaker-tag').textContent = 'Wall-E';
-            console.log('[Wall-E/EVE] Handoff loop stopped.');
+            document.getElementById('wev-speaker-tag').textContent = 'Darth Vader';
+            console.log('[Vader/Trooper] Handoff loop stopped.');
         });
     }
 
