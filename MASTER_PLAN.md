@@ -1,6 +1,7 @@
 # MASTER PLAN
 ## Wall-E & EVE — Autonomous Physical-Digital AI Theatre
 ### Architectural Blueprint & Source of Truth
+### Current Version: v3.0.0 — Single-Tab Matrix Interface
 
 ---
 
@@ -15,6 +16,7 @@ The two characters engage in real-time, hands-free spoken debates. The text outp
 - Every layer of the system (web, Python, firmware) must be as low-latency as possible
 - Hardware mechanics are hidden; only natural-looking motion is visible
 - The loop must be recoverable — if any single component fails, the others keep running
+- All six shape-models.com playgrounds are driven from one browser tab through a same-origin hidden iframe matrix
 
 ---
 
@@ -115,6 +117,35 @@ The moment `utterance.onend` fires, `clearInterval` terminates the loop instantl
 [loop repeats indefinitely]
 ```
 
+### Stage 4 — Dramatic Refusal Triggers
+
+The /play/refusal playground lets you define boundary phrases — words or patterns the AI should refuse to engage with. When the MutationObserver detects one of these patterns in the streaming output, the script does not continue the normal speech-and-animation flow. Instead it executes a defensive interrupt sequence:
+
+1. The running `speechSynthesis` utterance is immediately cancelled
+2. All servo animation intervals are cleared
+3. A defensive posture command sequence fires over the WebSocket:
+   - Channel 0 drops to 60° — Wall-E bows his head down
+   - Channel 3 tilts to 120° — EVE turns her head away
+4. Both postures hold until the user resumes the session or a configurable timeout clears them
+
+This gives the live performance a visually dramatic physical reaction to sensitive content, reinforcing the character boundaries in a way the audience can see and feel.
+
+### Stage 5 — Telemetry & Performance Logging
+
+Every completed spoken turn is written to `server/performance_logs.json` by the Python relay server. Each log entry records:
+
+| Field | Description |
+|---|---|
+| `timestamp` | ISO 8601 time of the completed turn |
+| `speaker` | `"wall-e"` or `"eve"` |
+| `text` | The full spoken text block |
+| `char_count` | Character length of the text |
+| `turn_number` | Sequential turn index in the current session |
+| `dial_snapshot` | All six dial normalized values (0–100) at generation time |
+| `speech_rate` | Computed `utterance.rate` value used for playback |
+
+This log is designed to be dropped directly into the /play/eval iframe for automated quality scoring of the dialogue session.
+
 ---
 
 ## 5. Multimodal Dial Modifiers
@@ -156,18 +187,86 @@ interval_ms  = 200 − (driver / 100) × 150
 
 This means a high-energy, high-verbosity scene produces rapid, staccato mechanical bursts. A low-energy, calm scene produces slow, deliberate nods that match the languid speech rate.
 
-### Unified Control Dashboard
+### Unified Master HUD
 
-A local HTML file runs in the ThinkPad browser alongside the shape-models.com tabs. It provides:
+The unified control interface is not a separate HTML file — it is injected directly into the `/play/tone` tab as a floating overlay sidebar. This means all controls live inside the same browser tab with direct JavaScript access to the page's own DOM.
 
-- Global system prompt sliders for both characters on one screen
-- Live override of any individual tone parameter mid-session
-- A master pause/resume button that halts the conversation handoff loop
-- Connection status indicators for the WebSocket relay and serial port
+The HUD is a fixed-position panel, 272 px wide, anchored to the right edge of the screen at the maximum CSS z-index. It collapses to a 34 px sliver via a toggle button so it never permanently blocks the page content.
+
+| HUD Section | Function |
+|---|---|
+| Model Selection | Syncs the chosen AI model to all five background iframes simultaneously |
+| Tone Dials | Six sliders mirroring the main page dials; changes push to main page AND all iframes |
+| Persona | Wall-E and EVE name fields; pushes to the /play/persona iframe's NAME and ROLE inputs |
+| Pacing | Bob speed and Turn pause sliders for future choreography timing control |
+| Refusal Threshold | Slider targeted at the /play/refusal iframe's boundary configuration |
+| Iframe Status | Live 🟢/🟡/🔴 indicator for each of the five background iframes |
+| Sync All | Force-pushes all current HUD values to every ready iframe at once |
+| Generate | Triggers the main page's Run button from the HUD without touching the keyboard |
 
 ---
 
-## 6. Hardware Infrastructure
+## 6. Single-Tab Matrix Interface
+
+### Same-Origin Hidden Iframe Architecture
+
+All six shape-models.com playgrounds are loaded and controlled from inside the single `/play/tone` browser tab. Five `<iframe>` elements are appended to the page body and styled with `display:none; width:0; height:0;` so they are completely invisible and have zero impact on the visible page layout.
+
+| iframe key | URL loaded | Purpose |
+|---|---|---|
+| `persona` | `/play/persona` | Character backstory, voice, and name definitions |
+| `choreographer` | `/play/choreographer` | Conversation pacing and turn-taking rules |
+| `refusal` | `/play/refusal` | Boundary phrase configuration and safety settings |
+| `diff` | `/play/diff` | Side-by-side prompt comparison and A/B testing |
+| `eval` | `/play/eval` | Automated quality scoring of completed dialogue sessions |
+
+Because every URL shares the exact same origin (`shape-models.com`), the browser applies no CORS restrictions. JavaScript running in the parent `/play/tone` tab can freely read and write into each iframe's `contentDocument` and `contentWindow` as if they were part of the same page.
+
+### Iframe Loading & React Hydration
+
+The iframes load a full React application on each URL. After the HTML arrives and `iframe.onload` fires, a 2500 ms timer allows React to complete component mounting before the parent marks the iframe as ready. If the `contentDocument` is inaccessible when the timer fires (for example if the page returns a 404 or sends an X-Frame-Options header), the iframe is marked as Blocked and shown with a red indicator in the HUD.
+
+### HUD Status Feed
+
+Every iframe has a live status row in the Master HUD:
+
+- 🟡 Loading — iframe has been appended but has not finished loading
+- 🟢 Ready — React has hydrated and the DOM can be driven by the parent
+- 🔴 Blocked — the page returned an error or refused iframe embedding
+
+---
+
+## 7. React-Compatible DOM Mirroring
+
+### Why Direct Value Assignment Fails
+
+shape-models.com is a React application. React manages input values through its internal fiber state tree, not through the native DOM `value` property. When external code sets `input.value = 'x'` directly, the DOM updates but React's state engine does not fire a change, so the prompt system ignores the new value entirely.
+
+### The Native Prototype Setter Technique
+
+The correct way to update a React-controlled input from outside is a two-step process:
+
+1. **Call the native prototype setter** — retrieve `Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set` and invoke it on the element. This bypasses React's property interception and marks the element as dirty at the browser engine level.
+2. **Fire a real DOM event** — dispatch a native `new Event('input', { bubbles: true })` on the element. This travels through the same event delegation path React registered and triggers the state update.
+
+**Critical detail:** The prototype setter must come from the element's **own window object**, not from the parent tab's window. Iframes running a React app each have their own `HTMLInputElement.prototype` instance. Using the parent's prototype setter on an iframe's element silently fails in Chromium because the ownership check on the internal slot does not match. The `setReactValue(el, value, frameWin)` helper accepts the iframe's `contentWindow` specifically to handle this.
+
+### Sync Cascade
+
+Every value change on the Master HUD triggers a three-level cascade:
+
+```
+HUD slider moves
+    ↓  pushDialToMainPage()     — updates the native slider on /play/tone
+    ↓  syncDialInDoc() × 5      — updates matching sliders in each ready iframe
+    ↓  sendServo()              — sends S<ch>:<angle> to relay.py over WebSocket
+```
+
+Model selection and persona field changes follow the same pattern, targeting `<select>` / `[role="combobox"]` elements and `<input type="text">` elements respectively.
+
+---
+
+## 8. Hardware Infrastructure
 
 ### Component Overview
 
@@ -227,7 +326,7 @@ Angles are clamped to 0–180°. Only channels 0–5 are accepted by the firmwar
 
 ---
 
-## 7. File & Folder Structure
+## 9. File & Folder Structure
 
 ```
 RobotProject/
@@ -237,10 +336,11 @@ RobotProject/
 ├── .gitignore
 │
 ├── browser/
-│   └── wall_e_eve.user.js              ← Tampermonkey userscript for shape-models.com
+│   └── wall_e_eve.user.js              ← v3.0.0 unified matrix userscript
 │
 ├── server/
-│   └── relay.py                        ← Python WebSocket server + serial relay
+│   ├── relay.py                        ← Python WebSocket server + serial relay
+│   └── performance_logs.json           ← auto-generated telemetry (gitignored)
 │
 └── firmware/
     └── esp32_servo_controller/
@@ -252,16 +352,13 @@ RobotProject/
 ```
 RobotProject/
 │
-├── dashboard/
-│   └── index.html                      ← Local HTML master control board
-│
 └── docs/
     └── wiring_photos/                  ← Reference images for physical assembly
 ```
 
 ---
 
-## 8. Development Checklist
+## 10. Development Checklist
 
 ### Phase 1 — Digital Pipeline (software only)
 - [x] `relay.py` — WebSocket server receives dial data, forwards to ESP32 via serial
@@ -272,8 +369,13 @@ RobotProject/
 - [x] Web Speech API voice synthesis integrated into userscript
 - [x] Syllable-synchronized head-bob loop (ENERGY + VERBOSITY scaled interval, ch 0)
 - [x] MutationObserver output-stream detection with 850 ms debounce
-- [x] Dial values normalized to 0-100 and stored as live speech/animation parameters
-- [ ] Automatic conversation handoff between Wall-E and EVE tabs (next milestone)
+- [x] Dial values normalized to 0–100 and stored as live speech/animation parameters
+- [x] Floating Master HUD sidebar with tone dials, model select, persona fields, pacing, refusal, and iframe status
+- [x] Five same-origin hidden iframes loaded in background (`/play/persona`, `/play/diff`, `/play/refusal`, `/play/eval`, `/play/choreographer`)
+- [x] React-compatible native prototype value sync from HUD to all iframes
+- [ ] Refusal trigger pattern matching → defensive posture servo commands
+- [ ] Telemetry logging in `relay.py` → `server/performance_logs.json`
+- [ ] Automatic conversation handoff between Wall-E and EVE
 
 ### Phase 3 — Physical Build (hardware)
 - [ ] Stage base constructed with servo mounting positions
@@ -286,11 +388,11 @@ RobotProject/
 - [ ] Tone dial → servo speed mapping calibrated
 - [ ] Full autonomous loop tested for 10+ minutes without intervention
 
-### Phase 5 — Master Control Dashboard
-- [ ] Local HTML dashboard built and tested
-- [ ] Global prompt controls wired to relay.py API
-- [ ] Live override verified during active conversation loop
+### Phase 5 — Evaluation & Scoring
+- [ ] performance_logs.json pipeline connected to /play/eval iframe
+- [ ] Automated scoring criteria defined and tested
+- [ ] Session replay from log file verified
 
 ---
 
-*Last updated: 2026-07-10 — Sections 4 & 5 revised to reflect automated text-driven pipeline (v2.0.0 userscript)*
+*Last updated: 2026-07-10 — v3.0.0: Single-Tab Matrix Interface, React DOM Mirroring, Refusal Triggers, Telemetry Logging architecture documented*
