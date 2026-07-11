@@ -41,3 +41,7 @@ ehthumbs.db
 *.log
 *.tmp
 *.temp
+
+# ── Project-specific generated files ──────────────────────────────
+# NDJSON telemetry written by relay.py — grows every session, never commit
+server/performance_logs.json

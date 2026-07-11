@@ -1,7 +1,7 @@
 # MASTER PLAN
 ## Darth Vader & Imperial Stormtrooper — Autonomous Physical-Digital AI Theatre
 ### Architectural Blueprint & Source of Truth
-### Current Version: v3.3.0 — Full Dual-Character Embodied Loop
+### Current Version: v3.4.0 — Full Dual-Character Embodied Loop + Dynamic Behaviour Systems
 
 ---
 
@@ -113,13 +113,18 @@ The moment `utterance.onend` fires, `clearInterval` terminates the head loop ins
     ↓  text stripped of UI labels
     ↓
 [window.speechSynthesis.speak(utterance) — character-specific voice selected]
-    ↓  utterance.onstart  → head-bob loop starts on active speaker's head channel (ch 0 Vader | ch 3 Trooper)
+    ↓  utterance.onstart  → stopNoiseInterval() — Temperature noise silenced
+    ↓                     → head-bob loop starts on active speaker's channel (ch 0 Vader | ch 3 Trooper)
     ↓                     → arm gesture scheduled at ~40% through utterance (ch 2 Vader | ch 5 Trooper → 135° for 700 ms)
     ↓  utterance.onend   → loop cleared, speaker head → S<ch>:90, entry pushed to sessionLog
-    ↓                     → pushToEval() writes live transcript to /play/eval iframe
+    ↓                     → pushToEval() writes live transcript + scoring criteria to /play/eval
     ↓
-[scheduleHandoff waits hudTurnPause delay (200–3000 ms, HUD-controlled)]
-    ↓  syncPersonaField('NAME', …) pushes incoming speaker's name to /play/persona
+[scheduleHandoff]
+    ↓  resolveDiffUncertainty() if diff divergence is currently active
+    ↓  detectSentiment(completedText) → updateSentimentDisplay()
+    ↓  syncPersonaField('NAME', …) + injectPersonaModifier() → /play/persona backstory
+    ↓  startNoiseInterval() — Temperature noise resumes during inter-turn gap
+    ↓  waits hudTurnPause delay (200–3000 ms, HUD-controlled)
     ↓  pastes completed text into opposing character's prompt
     ↓  triggers next generation phase
     ↓
@@ -155,13 +160,29 @@ Every completed spoken turn is written to `server/performance_logs.json` by the 
 
 This log persists to disk across sessions. A parallel in-memory `sessionLog` array mirrors the same records inside the browser. After every completed turn, `pushToEval()` formats the full session as a running `[Turn N] SPEAKER: text…` transcript and writes it directly into the `/play/eval` iframe's prompt input for real-time automated scoring — no manual file handling required.
 
+### Stage 6 — Dynamic Real-Time Adaptations
+
+Four autonomous behaviour systems run in parallel with the core speech loop, reading live conversation data and adjusting the physical performance in real time.
+
+**Temperature Noise Engine** — `findTemperatureSlider()` captures the Temperature slider outside the tone-dials section using inverse DOM logic (ancestor contains “TEMPERATURE” but none of the six dial names). The normalised value (0–100) is stored in `temperatureValue`. During inter-turn silence, `startNoiseInterval()` fires `applyTemperatureNoise()` at 2000–500 ms intervals (scaled to temperature), injecting random ±8° deviations on random servo channels to simulate physical restlessness. The noise loop stops the instant `utterance.onstart` fires and restarts inside `scheduleHandoff()`. High temperature produces fidgety, restless figures; low temperature produces stillness.
+
+**Sentiment-Driven Persona Injection** — Every handoff calls `detectSentiment(completedText)`, which tests the completed turn against four aggressive-language regex patterns (threats, challenges, degrading terms). Two or more matches set sentiment to `'aggressive'`. `injectPersonaModifier()` then appends an emotional intensity tag to the largest textarea inside the `/play/persona` iframe using the React native-prototype setter. The modifier is stripped and replaced on each subsequent turn so it never accumulates. A live **Sentiment** badge in the HUD updates green (`neutral`) or red (`aggressive`) in real time.
+
+**Eval Closed-Loop Feedback** — `runEvalScoring()` calls `monitorEvalOutput()` before triggering generation. A one-shot MutationObserver waits on the `/play/eval` output area; `parseEvalScore()` extracts all `N/10` patterns from the scoring response and averages them. If the average falls below **6.0/10**, `applyEvalFeedback()` reduces `dialValues.ENERGY` and `dialValues.VERBOSITY` by up to 30 points, pushes the new values to the main page and all iframes, sends updated servo positions to both affected channels, and returns both heads to 90° neutral. The event is also logged to relay.py for the terminal record.
+
+**Diff Uncertainty Visualization** — `initDiffMonitor()` sets up a persistent MutationObserver on the `/play/diff` iframe body. After each mutation burst, `checkDiffOutputs()` identifies the two richest output-like text blocks and computes their Jaccard word-overlap similarity. Similarity below **0.35** (< 35% shared vocabulary = wildly divergent outputs) triggers `triggerDiffUncertainty()`: the Stormtrooper’s head (ch 3) pans side-to-side three times at 200 ms intervals, and Vader’s arm (ch 2) raises to 135° and holds. The physical state resolves automatically when similarity recovers or at the next `scheduleHandoff()` boundary.
+
 ---
 
 ## 5. Multimodal Dial Modifiers
 
-### The Temperature Slider Is Explicitly Ignored
+### Temperature Slider as a Physical Noise Source
 
-The shape-models.com playground has a **Temperature** slider at the top of the page above the six tone dials. The userscript's DOM scoping logic (`getToneDialsSection`) finds the tightest container that holds only the six named dials. The Temperature slider lives outside this section and is structurally unreachable. An additional hard-exclusion guard inside `findDialName` returns `null` the moment the word "TEMPERATURE" appears in any ancestor within 4 DOM levels of a slider element.
+The shape-models.com playground has a **Temperature** slider at the top of the page above the six tone dials. The `getToneDialsSection` and `findDialName` guards keep it deliberately excluded from tone-dial binding so it never interferes with the six named dials.
+
+A separate `findTemperatureSlider()` function captures it using inverse DOM logic: it scans for a range input whose ancestor contains “TEMPERATURE” but none of the six dial names. The normalised value (0–100) is displayed in the HUD **TEMP** indicator and stored in `temperatureValue`, which drives the physical noise engine described in Stage 6 above.
+
+The six named dials (WARMTH, VERBOSITY, ENERGY, DIRECTNESS, CONCRETENESS, STRUCTURE) remain fully isolated from Temperature through the existing `findDialName` guard that returns `null` the moment “TEMPERATURE” appears in any ancestor within 4 DOM levels.
 
 ### The Six Dials as Global Performance Modifiers
 
@@ -228,7 +249,7 @@ All six shape-models.com playgrounds are loaded and controlled from inside the s
 | `persona` | `/play/persona` | Character backstory, voice, and name definitions |
 | `choreographer` | `/play/choreographer` | Conversation pacing and turn-taking rules — receives HUD Bob Speed (slot 0) and Turn Pause (slot 1) on every slider change |
 | `refusal` | `/play/refusal` | Boundary phrase configuration and safety settings |
-| `diff` | `/play/diff` | Side-by-side prompt comparison and A/B testing |
+| `diff` | `/play/diff` | Side-by-side prompt comparison — `initDiffMonitor()` watches for divergent outputs (Jaccard similarity < 0.35) and triggers Trooper head-pan (ch 3) + Vader arm-raise and hold (ch 2) |
 | `eval` | `/play/eval` | Automated quality scoring of completed dialogue sessions |
 
 Because every URL shares the exact same origin (`shape-models.com`), the browser applies no CORS restrictions. JavaScript running in the parent `/play/tone` tab can freely read and write into each iframe's `contentDocument` and `contentWindow` as if they were part of the same page.
@@ -333,7 +354,7 @@ Examples:
   S5:135   →  Stormtrooper arm raise
 ```
 
-Angles are clamped to 0–180°. Only channels 0–5 are accepted by the firmware. All other channels are silently ignored.
+Angles arrive from the browser as 0–180° and are clamped first by `processLine()`, then by each channel’s `SOFT_MIN_ANGLE` / `SOFT_MAX_ANGLE` inside `moveServo()`. Edit the soft-limit arrays in the firmware and reflash during Phase 4 to match each figure’s physical stop points. All other channels are silently ignored.
 
 ---
 
@@ -347,7 +368,7 @@ RobotProject/
 ├── .gitignore
 │
 ├── browser/
-│   └── vader_trooper.user.js           ← v3.2.0 unified matrix userscript
+│   └── vader_trooper.user.js           ← v3.4.0 unified matrix userscript
 │
 ├── server/
 │   ├── relay.py                        ← Python WebSocket server + serial relay
@@ -371,12 +392,12 @@ RobotProject/
 
 ## 10. Development Checklist
 
-> **Status as of 2026-07-11 — Software pipeline v3.3.0. Full dual-character embodied loop is locked and verified.**
-> Both figures now animate independently: Vader bobs on ch 0 and Trooper turns on ch 3 during their own speech
-> turns only. Arm tendon gestures fire automatically mid-utterance on ch 2 and ch 5. Each character speaks
-> with a distinct voice. All HUD sliders are live and wired to their target iframes (refusal, choreographer,
-> animation engine). The /play/eval iframe receives a live running transcript after every turn. Persona sync
-> fires on every handoff. The digital stack is complete and fully optimised. Phase 3 begins on hardware arrival.
+> **Status as of 2026-07-11 — Software pipeline v3.4.0. Digital stack complete with four active dynamic behaviour layers.**
+> Both figures animate independently per speaker. Temperature drives physical noise between turns. Dialogue
+> sentiment automatically modulates the /play/persona backstory. The eval iframe feeds a closed-loop score
+> monitor that adjusts live dial values. The /play/diff iframe triggers physical uncertainty responses.
+> Firmware has per-servo soft limits; relay.py has a sweep-test; HUD has a full Calibration panel.
+> All software work is complete — Phase 3 begins the moment hardware components arrive.
 
 ### Phase 1 — Digital Pipeline (software only)
 - [x] `relay.py` — WebSocket server receives dial data, forwards to ESP32 via serial
@@ -407,13 +428,18 @@ RobotProject/
 - [x] Sentiment-driven persona injection — `detectSentiment()` classifies completed turns; `injectPersonaModifier()` appends intensity tag to the largest `/play/persona` textarea when 2+ aggressive patterns match
 - [x] Eval closed-loop feedback — `monitorEvalOutput()` reads the eval iframe stream; `applyEvalFeedback()` lowers ENERGY and VERBOSITY dials and returns both heads to neutral when avg score < 6.0/10
 - [x] Diff uncertainty visualization — `initDiffMonitor()` watches `/play/diff`; Jaccard similarity < 0.35 triggers Trooper head side-pan (ch 3) and Vader arm raise-and-hold (ch 2) until outputs converge
+- [x] Firmware serial ACK — `processLine()` echoes `ACK:S<ch>:<applied_angle>` after every `moveServo()` call; `relay.py` `read_serial_acks()` background task logs each echo for live Phase 3 wiring verification
+- [x] Single-channel test — `run_channel_test()` in relay.py sweeps one servo in isolation; HUD **▶ Test CH** button sends `test_channel` message; `channel_test_complete` response confirms
+- [x] Calibration limit recorder — **↓ Set Min** and **↑ Set Max** buttons in HUD CALIBRATION record the current slider angle and display the exact `SOFT_MIN_ANGLE[ch]`/`SOFT_MAX_ANGLE[ch]` firmware edit
+- [x] Loop health watchdog — 15-second interval checks elapsed time since last turn; HUD shows ⚠️ Loop stalled after 90 s of inactivity
+- [x] Session timer + animation tick-rate meter — HUD displays elapsed loop time (m:ss) updated each turn; live ticks/s display refreshes every 2 s during speech for Phase 4 speed calibration
+- [x] `.gitignore` created — `server/performance_logs.json`, Python bytecode, Arduino build artefacts, and OS files excluded
 
-> **All software tooling for Phases 3 and 4 is complete as of 2026-07-11.** The firmware now has
-> configurable per-servo soft limits (`SOFT_MIN_ANGLE` / `SOFT_MAX_ANGLE` arrays) that clamp each
-> channel independently. `relay.py` has `run_sweep_test()` which exercises all six channels in
-> sequence over serial. The HUD **CALIBRATION** panel provides a per-channel angle slider for
-> direct servo control and a **Sweep All Channels** button. All tooling is ready and waiting for
-> the physical hardware build steps below.
+> **All software tooling for Phases 3 and 4 is complete as of 2026-07-11.** The firmware has
+> per-servo soft limits and echoes `ACK:S<ch>:<angle>` after each command. `relay.py` has a
+> full sweep, single-channel test, and live serial-ACK reader. The HUD CALIBRATION panel has
+> per-channel slider, ▶ Test CH, ↓ Set Min, ↑ Set Max, and Sweep All. The loop section shows a
+> session timer, live animation ticks/s, and a health watchdog. Awaiting hardware.
 
 ### Phase 3 — Physical Build (hardware)
 - [ ] Stage base constructed with servo mounting positions
@@ -433,4 +459,4 @@ RobotProject/
 
 ---
 
-*Last updated: 2026-07-11 — v3.4.0: Temperature noise engine, sentiment-driven persona injection, eval closed-loop feedback, diff uncertainty visualization, per-servo soft limits in firmware (`SOFT_MIN_ANGLE`/`SOFT_MAX_ANGLE`), `run_sweep_test()` in relay.py, HUD CALIBRATION panel with per-channel slider and Sweep All button. All software todos complete — awaiting hardware for Phases 3 and 4.*
+*Last updated: 2026-07-11 — v3.4.0 final: firmware serial ACK, relay.py single-channel test + serial reader, HUD ▶ Test CH / ↓ Set Min / ↑ Set Max calibration buttons, session timer, animation tick-rate meter, loop health watchdog, `.gitignore` added. All software todos exhausted — project ready for Phase 3 hardware build.*

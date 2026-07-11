@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vader & Trooper Master Control Matrix
 // @namespace    robotproject.local
-// @version      3.2.0
+// @version      3.4.0
 // @description  Floating HUD + same-origin hidden iframe matrix for full shape-models.com pipeline control from /play/tone
 // @author       RobotProject
 // @match        https://www.shape-models.com/play/tone
@@ -175,6 +175,11 @@
     let noiseTimer          = null; // setInterval handle for inter-turn servo noise
     let diffUncertaintyActive = false; // true while diff outputs are divergent
     let lastSentiment       = 'neutral'; // 'neutral' or 'aggressive'
+    let watchdogTimer    = null;         // setInterval for loop-health check
+    let lastTurnTime     = 0;            // Date.now() stamp of last completed turn
+    let sessionStartTime = 0;            // Date.now() when the loop started
+    let tickCount        = 0;            // animation ticks since last rate update
+    let tickDisplayTimer = 0;            // last time tick rate was written to HUD
     // ──────────────────────────────────────────────────────────────
 
     // ── WebSocket ─────────────────────────────────────────────────
@@ -196,10 +201,14 @@
         ws.onmessage = (event) => {
             try {
                 const msg = JSON.parse(event.data);
-                if      (msg.type === 'replay_data')    handleReplayData(msg.entries || []);
-                else if (msg.type === 'sweep_complete') {
+                if      (msg.type === 'replay_data')          handleReplayData(msg.entries || []);
+                else if (msg.type === 'sweep_complete')       {
                     const el = document.getElementById('vt-cal-status');
                     if (el) el.textContent = 'Sweep complete \u2713';
+                }
+                else if (msg.type === 'channel_test_complete') {
+                    const el = document.getElementById('vt-cal-status');
+                    if (el) el.textContent = `CH${msg.channel} test complete \u2713`;
                 }
             } catch (_) {}
         };
@@ -279,6 +288,16 @@
             ch,
             HEAD_CENTER + (animPhase === 0 ? HEAD_BOB_RANGE : -HEAD_BOB_RANGE)
         );
+        // Live tick-rate meter: update HUD every 2 s for Phase 4 speed calibration
+        tickCount++;
+        const now = Date.now();
+        if (now - tickDisplayTimer >= 2000) {
+            const tps = (tickCount / ((now - tickDisplayTimer) / 1000)).toFixed(1);
+            const el  = document.getElementById('vt-ticks-display');
+            if (el) el.textContent = `${tps}/s`;
+            tickCount = 0;
+            tickDisplayTimer = now;
+        }
     }
 
     function startAnimation() {
@@ -318,6 +337,13 @@
     function sendTelemetry(speaker, text) {
         if (!wsReady || ws.readyState !== WebSocket.OPEN) return;
         turnCount++;
+        lastTurnTime = Date.now();   // watchdog: record time of last completed turn
+        // Session timer display
+        if (sessionStartTime > 0) {
+            const elapsed = Math.round((Date.now() - sessionStartTime) / 1000);
+            const el = document.getElementById('vt-session-timer');
+            if (el) el.textContent = `${Math.floor(elapsed / 60)}m${String(elapsed % 60).padStart(2, '0')}s`;
+        }
 
         const counter = document.getElementById('vt-turn-count');
         if (counter) counter.textContent = turnCount;
@@ -1214,6 +1240,12 @@
                         <span class="vt-lbl" style="flex:0 0 50px">Speaker</span>
                         <span id="vt-speaker-tag" class="vt-tag" style="color:#a78bfa">Darth Vader</span>
                     </div>
+                    <div class="vt-row">
+                        <span class="vt-lbl">Session</span>
+                        <span id="vt-session-timer" class="vt-tag" style="color:#52525b">—</span>
+                        <span class="vt-lbl" style="flex:0 0 50px">Speed</span>
+                        <span id="vt-ticks-display" class="vt-tag" style="color:#52525b">—</span>
+                    </div>
                 </div>
 
                 <div class="vt-sec">
@@ -1238,6 +1270,12 @@
                         <input type="range" id="vt-cal-angle" class="vt-slider" min="0" max="180" value="90">
                         <span id="vt-cal-angle-val" class="vt-num">90</span>
                     </div>
+                    <div class="vt-row" style="gap:4px;margin-bottom:5px">
+                        <button id="vt-cal-test" class="vt-btn vt-btn-ghost" style="flex:1;padding:4px 0;font-size:10px;margin-bottom:0">▶ Test CH</button>
+                        <button id="vt-cal-min"  class="vt-btn vt-btn-ghost" style="flex:1;padding:4px 0;font-size:10px;margin-bottom:0;margin-left:3px">↓ Set Min</button>
+                        <button id="vt-cal-max"  class="vt-btn vt-btn-ghost" style="flex:1;padding:4px 0;font-size:10px;margin-bottom:0;margin-left:3px">↑ Set Max</button>
+                    </div>
+                    <div id="vt-cal-limits" style="font-size:9px;color:#52525b;margin-bottom:4px;padding:0 2px">—</div>
                     <button id="vt-sweep-btn" class="vt-btn vt-btn-ghost">⚙ Sweep All Channels</button>
                     <div id="vt-cal-status" style="font-size:10px;color:#52525b;margin-top:4px;padding:0 2px">—</div>
                 </div>
@@ -1443,6 +1481,14 @@
             document.getElementById('vt-speaker-tag').textContent  = 'Darth Vader';
             updateHudStatus('ws', wsReady ? '🟢 Loop active' : '🔴 Relay offline', wsReady ? '#4ade80' : '#f87171');
             console.log('[Vader/Trooper] Handoff loop started — Darth Vader goes first.');
+            lastTurnTime     = Date.now();
+            sessionStartTime = Date.now();
+            if (watchdogTimer) clearInterval(watchdogTimer);
+            watchdogTimer = setInterval(() => {
+                if (!loopActive) { clearInterval(watchdogTimer); watchdogTimer = null; return; }
+                const staleSec = Math.round((Date.now() - lastTurnTime) / 1000);
+                if (staleSec > 90) updateHudStatus('ws', `\u26a0\ufe0f Loop stalled (${staleSec}s)`, '#f59e0b');
+            }, 15000);
             // Kick off by clicking generate immediately
             const runBtn = [...document.querySelectorAll('button')]
                 .find(b => /run|generate|ask/i.test(b.textContent));
@@ -1459,6 +1505,12 @@
             stopAnimation();
             stopNoiseInterval();
             if (diffUncertaintyActive) resolveDiffUncertainty();
+            if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
+            sessionStartTime = 0;
+            const timerEl = document.getElementById('vt-session-timer');
+            if (timerEl) timerEl.textContent = '\u2014';
+            const tickEl  = document.getElementById('vt-ticks-display');
+            if (tickEl)  tickEl.textContent  = '\u2014';
             sendServo(HEAD_BOB_CHANNEL, HEAD_CENTER);
             document.getElementById('vt-speaker-tag').textContent = 'Darth Vader';
             console.log('[Vader/Trooper] Handoff loop stopped.');
@@ -1489,6 +1541,39 @@
             });
         }
 
+        // "Test CH" — single-channel sweep for isolated Phase 3 wiring verification
+        document.getElementById('vt-cal-test')?.addEventListener('click', () => {
+            const statusEl = document.getElementById('vt-cal-status');
+            if (!wsReady || ws.readyState !== WebSocket.OPEN) {
+                if (statusEl) statusEl.textContent = 'Relay offline';
+                return;
+            }
+            const ch = parseInt(calCh.value, 10);
+            ws.send(JSON.stringify({ type: 'test_channel', channel: ch }));
+            if (statusEl) statusEl.textContent = `Testing CH${ch}\u2026`;
+        });
+
+        // "Set Min" / "Set Max" — record current angle as suggested soft limit for firmware
+        const suggestedLimits = Array.from({ length: 6 }, () => ({}));
+        const calLimitsEl     = document.getElementById('vt-cal-limits');
+
+        function updateLimitsDisplay(ch) {
+            if (!calLimitsEl) return;
+            const l = suggestedLimits[ch];
+            calLimitsEl.textContent =
+                `CH${ch}: SOFT_MIN[${ch}]=${l.min ?? '?'}  SOFT_MAX[${ch}]=${l.max ?? '?'} \u2014 update firmware`;
+        }
+        document.getElementById('vt-cal-min')?.addEventListener('click', () => {
+            const ch = parseInt(calCh.value, 10);
+            suggestedLimits[ch].min = parseInt(calAngle.value, 10);
+            updateLimitsDisplay(ch);
+        });
+        document.getElementById('vt-cal-max')?.addEventListener('click', () => {
+            const ch = parseInt(calCh.value, 10);
+            suggestedLimits[ch].max = parseInt(calAngle.value, 10);
+            updateLimitsDisplay(ch);
+        });
+
         // "Sweep All" — relay.py exercises every channel for Phase 3 wiring verification
         document.getElementById('vt-sweep-btn').addEventListener('click', () => {
             const statusEl = document.getElementById('vt-cal-status');
@@ -1497,7 +1582,7 @@
                 return;
             }
             ws.send(JSON.stringify({ type: 'sweep_test' }));
-            if (statusEl) statusEl.textContent = 'Sweeping…';
+            if (statusEl) statusEl.textContent = 'Sweeping\u2026';
         });
     }
 

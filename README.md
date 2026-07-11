@@ -25,11 +25,15 @@ All five background playgrounds run as hidden iframes inside the main tone tab. 
 
 **`browser/vader_trooper.user.js`** — The browser script
 
-This is a Tampermonkey userscript that lives inside Google Chrome. It watches the AI website in the background and does three things at once:
+This is a Tampermonkey userscript that lives inside Google Chrome. It drives the full embodied AI theatre loop:
 
-- Waits for the AI to finish writing a response, then reads the completed text out loud through the computer speakers using the browser's built-in voice engine
-- While the voice is speaking, sends a rapid stream of movement signals to the local Python server so Darth Vader's head bobs in time with the speech
-- Reads the six tone dials on the page (WARMTH, VERBOSITY, ENERGY, DIRECTNESS, CONCRETENESS, STRUCTURE) to shape how fast the voice speaks and how sharply the motors move
+- Waits for the AI to finish writing a response, then reads it out loud — Darth Vader with a deep male voice, the Stormtrooper with a sharper, distinct voice
+- While each character speaks, animates that character’s head servo (Vader ch 0 bobs, Trooper ch 3 turns) and fires a dramatic arm-tendon raise at ~40% through the utterance
+- Reads the six tone dials and the Temperature slider: dials shape voice rate and motor intervals; Temperature drives a physical noise engine that twitches servos at random intervals during silence
+- Detects aggressive dialogue sentiment and injects emotional intensity modifiers into the /play/persona backstory in real time
+- Monitors the /play/eval iframe’s scoring output and automatically lowers ENERGY and VERBOSITY dials if session quality drops below threshold
+- Watches the /play/diff iframe for wildly divergent outputs and triggers a Stormtrooper head-pan and Vader arm-hold response
+- Provides a floating HUD sidebar with sections for model selection, tone dials, persona, pacing, refusal threshold, evaluation, calibration, and iframe status
 
 **`server/relay.py`** — The local data bridge
 
@@ -106,24 +110,40 @@ You should see:
 - **Watch the terminal** — you will see a live stream of simulated motor commands like this:
 
 ```
-[Vader/Trooper] Stream complete → The Emperor's will shall be done…
+[Vader/Trooper] Stream complete → The Emperor’s will shall be done…
 [MOCK STREAM] Received from Browser: {"channel":0,"angle":100} -> Outbound: S0:100
 [MOCK STREAM] Received from Browser: {"channel":0,"angle":80}  -> Outbound: S0:80
+[MOCK STREAM] Received from Browser: {"channel":2,"angle":135} -> Outbound: S2:135
 [MOCK STREAM] Received from Browser: {"channel":0,"angle":100} -> Outbound: S0:100
+[telemetry] Turn 1 logged — speaker: vader — chars: 42
+[Vader/Trooper] Stream complete → As you command, Lord Vader…
+[MOCK STREAM] Received from Browser: {"channel":3,"angle":60}  -> Outbound: S3:60
+[MOCK STREAM] Received from Browser: {"channel":3,"angle":120} -> Outbound: S3:120
+[MOCK STREAM] Received from Browser: {"channel":5,"angle":135} -> Outbound: S5:135
+[telemetry] Turn 2 logged — speaker: trooper — chars: 38
 ```
 
-Those lines are exactly what would be sent to the physical motors in real life. The faster Darth Vader is speaking, the faster those lines scroll.
+Vader’s head bobs (ch 0) while he speaks and the Trooper’s head turns (ch 3) while it speaks. Both arm servos raise (ch 2, ch 5) mid-utterance. Telemetry is written to `server/performance_logs.json` after each turn.
 
 ---
 
 ## When the Hardware Is Ready
 
-When the ESP32 and servos are wired up and plugged in:
+### Phase 3 — Wiring and first-power verification
 
-1. Open `server/relay.py` and change line `MOCK_MODE: bool = True` to `MOCK_MODE: bool = False`
-2. The script will auto-detect the COM port the ESP32 is on
-3. If auto-detection picks the wrong port, set `SERIAL_PORT = "COM3"` (or whichever port yours uses) at the top of the file
-4. Everything else stays the same — the browser script and the Arduino firmware do not need any changes
+1. Open `server/relay.py` and change `MOCK_MODE: bool = True` to `MOCK_MODE: bool = False`
+2. The relay auto-detects the ESP32’s COM port — or set `SERIAL_PORT = "COM3"` manually if needed
+3. Power up the 5 V / 3 A wall adapter to the PCA9685 V+ rail **before** plugging in the ESP32
+4. In Chrome, open the HUD **CALIBRATION** panel. Select each channel in the dropdown and click **▶ Test CH** one by one — watch the servo move to confirm the wire is connected to the right channel
+5. Click **⚙ Sweep All Channels** as a final full-wiring check. The relay terminal prints `ch0 → 90°` etc., and the ESP32 echoes `ACK:S0:90` for every command so you can see both ends of the pipeline are working
+
+### Phase 4 — Calibration
+
+1. Select a channel in the CALIBRATION dropdown and drag the **Angle** slider slowly toward one extreme until the figure’s joint reaches its physical stop
+2. Note the angle value shown, then click **↓ Set Min** or **↑ Set Max** — the limits display shows the suggested firmware values for that channel
+3. Open `firmware/esp32_servo_controller/esp32_servo_controller.ino`, update `SOFT_MIN_ANGLE[ch]` and `SOFT_MAX_ANGLE[ch]` for the channel, and reflash
+4. Repeat for all 6 channels
+5. Start the autonomous loop and let it run uninterrupted for 10+ minutes to confirm stable operation before any live demonstration
 
 ---
 

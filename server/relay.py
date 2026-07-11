@@ -138,6 +138,29 @@ async def run_sweep_test(
     await websocket.send(json.dumps({"type": "sweep_complete"}))
 
 
+async def run_channel_test(
+    websocket: websockets.ServerConnection,
+    ser: serial.Serial,
+    ch: int,
+) -> None:
+    """
+    Sweep a single channel through 90\u00b0 \u2192 130\u00b0 \u2192 90\u00b0 \u2192 50\u00b0 \u2192 90\u00b0 with 500 ms between steps.
+    Isolates one servo during Phase 3 wiring without disturbing the other five.
+    Sends {\"type\": \"channel_test_complete\", \"channel\": ch} when finished.
+    """
+    ch = max(0, min(5, ch))
+    print(f"[sweep] Single-channel test: CH{ch}")
+    for angle in [90, 130, 90, 50, 90]:
+        line = f"S{ch}:{angle}\n"
+        if ser:
+            ser.write(line.encode("ascii"))
+            print(f"[sweep]  ch{ch} \u2192 {angle}\u00b0")
+        else:
+            print(f"[MOCK TEST] S{ch}:{angle}")
+        await asyncio.sleep(0.5)
+    await websocket.send(json.dumps({"type": "channel_test_complete", "channel": ch}))
+
+
 async def send_replay(websocket: websockets.ServerConnection) -> None:
     """
     Read performance_logs.json line-by-line and send all valid entries back to
@@ -166,6 +189,28 @@ async def send_replay(websocket: websockets.ServerConnection) -> None:
     payload = json.dumps({"type": "replay_data", "entries": entries, "count": len(entries)})
     await websocket.send(payload)
     print(f"[replay] Sent {len(entries)} entr{'y' if len(entries) == 1 else 'ies'} to browser.")
+
+
+async def read_serial_acks(ser: serial.Serial) -> None:
+    """
+    Background task: reads ACK lines sent back by the ESP32 and logs them.
+    The firmware prints ACK:S<ch>:<applied_angle> after each moveServo() call,
+    confirming which physical servo moved and its soft-clamped angle.
+    Useful during Phase 3 wiring and Phase 4 calibration.
+    """
+    buf = b""
+    while True:
+        try:
+            if ser.in_waiting > 0:
+                buf += ser.read(ser.in_waiting)
+                while b"\n" in buf:
+                    line_bytes, buf = buf.split(b"\n", 1)
+                    decoded = line_bytes.strip().decode("ascii", errors="ignore")
+                    if decoded:
+                        print(f"[ESP32] {decoded}")
+        except serial.SerialException:
+            break
+        await asyncio.sleep(0.02)
 
 
 async def handle_client(
@@ -211,6 +256,12 @@ async def handle_client(
             if isinstance(payload, dict) and payload.get("type") == "sweep_test":
                 await run_sweep_test(websocket, ser)
                 continue
+
+            # Single-channel test: isolate one servo for targeted Phase 3 verification.
+            if isinstance(payload, dict) and payload.get("type") == "test_channel":
+                await run_channel_test(websocket, ser, int(payload.get("channel", 0)))
+                continue
+
             commands = payload if isinstance(payload, list) else [payload]
 
             for cmd in commands:
@@ -256,6 +307,8 @@ async def main() -> None:
     print(f"[ws] Listening on ws://{WS_HOST}:{WS_PORT}  (Ctrl+C to stop)")
 
     async with websockets.serve(handler, WS_HOST, WS_PORT, compression=None):
+        if ser:
+            asyncio.create_task(read_serial_acks(ser))   # log ESP32 ACK lines
         await asyncio.Future()
 
 

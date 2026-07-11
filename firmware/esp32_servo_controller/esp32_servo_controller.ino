@@ -80,7 +80,15 @@ void processLine(const char* line) {
     if (sscanf(line + 1, "%d:%d", &ch, &angle) != 2) return;
     if (ch < 0 || ch >= NUM_SERVOS)                   return;
 
-    moveServo((uint8_t)ch, constrain(angle, 0, 180));
+    int raw     = constrain(angle, 0, 180);
+    int applied = constrain(raw, SOFT_MIN_ANGLE[ch], SOFT_MAX_ANGLE[ch]);
+    moveServo((uint8_t)ch, raw);
+    // Echo the effective (soft-clamped) angle back over serial.
+    // relay.py logs these as [ESP32] ACK:S<ch>:<angle> to confirm live wiring.
+    Serial.print("ACK:S");
+    Serial.print(ch);
+    Serial.print(":");
+    Serial.println(applied);
 }
 
 // ── Arduino lifecycle ─────────────────────────────────────────────
