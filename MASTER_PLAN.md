@@ -360,6 +360,12 @@ RobotProject/
 
 ## 10. Development Checklist
 
+> **Status as of 2026-07-10 — Software pipeline v3.1.0 is locked down and verified.**
+> The full digital stack (browser userscript, Python relay, ESP32 firmware) is complete and
+> running cleanly in mock mode on the ThinkPad. No further software work is required before
+> the physical build begins. The project is now paused on the software side and is perfectly
+> positioned to move directly into Phase 3 the moment the physical hardware components arrive.
+
 ### Phase 1 — Digital Pipeline (software only)
 - [x] `relay.py` — WebSocket server receives dial data, forwards to ESP32 via serial
 - [x] `esp32_servo_controller.ino` — ESP32 firmware parses `S<ch>:<angle>` commands
@@ -373,9 +379,9 @@ RobotProject/
 - [x] Floating Master HUD sidebar with tone dials, model select, persona fields, pacing, refusal, and iframe status
 - [x] Five same-origin hidden iframes loaded in background (`/play/persona`, `/play/diff`, `/play/refusal`, `/play/eval`, `/play/choreographer`)
 - [x] React-compatible native prototype value sync from HUD to all iframes
-- [ ] Refusal trigger pattern matching → defensive posture servo commands
-- [ ] Telemetry logging in `relay.py` → `server/performance_logs.json`
-- [ ] Automatic conversation handoff between Wall-E and EVE
+- [x] Refusal trigger pattern matching → defensive posture servo commands (ch 0 → 60°, ch 3 → 120°)
+- [x] Telemetry logging in `relay.py` → `server/performance_logs.json` (NDJSON, append-only)
+- [x] Automatic conversation handoff — Wall-E ↔ EVE loop with 800–1200 ms natural pause
 
 ### Phase 3 — Physical Build (hardware)
 - [ ] Stage base constructed with servo mounting positions
@@ -395,4 +401,4 @@ RobotProject/
 
 ---
 
-*Last updated: 2026-07-10 — v3.0.0: Single-Tab Matrix Interface, React DOM Mirroring, Refusal Triggers, Telemetry Logging architecture documented*
+*Last updated: 2026-07-10 — v3.1.0 software pipeline complete. Phases 1 & 2 fully checked off. Awaiting hardware for Phase 3.*

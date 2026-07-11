@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wall-E & EVE Master Control Matrix
 // @namespace    robotproject.local
-// @version      3.0.0
+// @version      3.1.0
 // @description  Floating HUD + same-origin hidden iframe matrix for full shape-models.com pipeline control from /play/tone
 // @author       RobotProject
 // @match        https://www.shape-models.com/play/tone
@@ -53,12 +53,15 @@
     const STREAM_END_DEBOUNCE_MS = 850;
     const IFRAME_READY_DELAY_MS  = 2500;   // ms after iframe load to let React hydrate
 
+    // Build iframe URLs from the current tab's origin so the script works on
+    // both shape-models.com and www.shape-models.com without cross-origin errors.
+    const ORIGIN      = window.location.origin;
     const IFRAME_PAGES = {
-        persona:       'https://www.shape-models.com/play/persona',
-        choreographer: 'https://www.shape-models.com/play/choreographer',
-        refusal:       'https://www.shape-models.com/play/refusal',
-        diff:          'https://www.shape-models.com/play/diff',
-        eval:          'https://www.shape-models.com/play/eval',
+        persona:       `${ORIGIN}/play/persona`,
+        choreographer: `${ORIGIN}/play/choreographer`,
+        refusal:       `${ORIGIN}/play/refusal`,
+        diff:          `${ORIGIN}/play/diff`,
+        eval:          `${ORIGIN}/play/eval`,
     };
 
     // All known model names on the site (extend if the site adds more)
@@ -87,6 +90,18 @@
     const HEAD_BOB_RANGE        = 10;
     const ANIM_INTERVAL_FAST_MS = 50;
     const ANIM_INTERVAL_SLOW_MS = 200;
+
+    // Phrases that indicate the AI has hit a content boundary.
+    // Any match pauses the loop and triggers the defensive posture.
+    const REFUSAL_PATTERNS = [
+        /\bI (can'?t|cannot|won'?t|will not|am unable to|am not able to)\b/i,
+        /\bI (should\s?n'?t|must\s?n'?t|am not (going|supposed) to)\b/i,
+        /\b(inappropriate|offensive|harmful|dangerous|illegal|unethical)\b/i,
+        /\bI('?m| am) (not able|unable) to (help|assist|provide|discuss)\b/i,
+        /\bI (don'?t|do not) (feel comfortable|think (I|it'?s) (appropriate|right))\b/i,
+        /\b(sorry|apologize|apologies),?\s*(but|however|I)\b/i,
+        /\bThis (request|topic|content|question) (violates|goes against|is (not|inappropriate))\b/i,
+    ];
     // ──────────────────────────────────────────────────────────────
 
     // ── State ─────────────────────────────────────────────────────
@@ -111,8 +126,12 @@
     // iframe registry: { key → { el: HTMLIFrameElement, ready: boolean } }
     const iframes = {};
 
-    let selectedModel = MODEL_OPTIONS[0];
-    let hudCollapsed  = false;
+    let selectedModel  = MODEL_OPTIONS[0];
+    let hudCollapsed   = false;
+    let currentSpeaker = 'walle';   // 'walle' or 'eve' — whose turn is active
+    let turnCount      = 0;         // increments on each cleanly completed turn
+    let loopActive     = false;     // true while the auto-handoff loop is running
+    let loopPaused     = false;     // true while held in defensive posture
     // ──────────────────────────────────────────────────────────────
 
     // ── WebSocket ─────────────────────────────────────────────────
@@ -216,6 +235,87 @@
         animPhase = 0;
     }
 
+    // ── Refusal detection ──────────────────────────────────────────
+
+    function isRefusal(text) {
+        return REFUSAL_PATTERNS.some(p => p.test(text));
+    }
+
+    // Immediately halt everything and freeze both figures in a boundary posture.
+    // Wall-E bows his head (ch 0 → 60°) and EVE turns away (ch 3 → 120°).
+    function triggerDefensivePosture() {
+        window.speechSynthesis.cancel();
+        stopAnimation();
+        sendServo(0, 60);
+        sendServo(3, 120);
+        loopPaused = true;
+        const tag = document.getElementById('wev-speaker-tag');
+        if (tag) tag.textContent = 'HALTED';
+        updateHudStatus('ws', '🔴 REFUSAL — loop paused', '#f87171');
+        console.warn('[Wall-E/EVE] Refusal detected — defensive posture engaged.');
+    }
+
+    // ── Telemetry ────────────────────────────────────────────────
+
+    // Send a completed-turn record to relay.py so it writes performance_logs.json.
+    function sendTelemetry(speaker, text) {
+        if (!wsReady || ws.readyState !== WebSocket.OPEN) return;
+        turnCount++;
+
+        const counter = document.getElementById('wev-turn-count');
+        if (counter) counter.textContent = turnCount;
+
+        ws.send(JSON.stringify({
+            type:        'telemetry',
+            speaker:     speaker,
+            text:        text,
+            turn:        turnCount,
+            char_count:  text.length,
+            speech_rate: parseFloat((0.75 + (dialValues.ENERGY / 100) * 0.65).toFixed(3)),
+            dials:       { ...dialValues },
+        }));
+    }
+
+    // ── Handoff loop ──────────────────────────────────────────────
+
+    // After a turn ends cleanly, flip the active speaker, wait a short natural
+    // pause, paste the completed text into the main page prompt, then click
+    // the generate button so the opposing character responds automatically.
+    function scheduleHandoff(completedText, speaker) {
+        const next = speaker === 'walle' ? 'eve' : 'walle';
+        currentSpeaker = next;
+
+        const tag = document.getElementById('wev-speaker-tag');
+        if (tag) tag.textContent = next === 'walle' ? 'Wall-E' : 'EVE';
+
+        const pauseMs = 800 + Math.floor(Math.random() * 400);   // 800–1200 ms
+
+        setTimeout(() => {
+            if (!loopActive || loopPaused) return;
+
+            // Find the main page's user message input
+            const promptEl = document.querySelector('textarea')
+                || [...document.querySelectorAll('input[type="text"]')]
+                    .find(el => /message|prompt|ask/i.test(el.placeholder || ''));
+
+            if (promptEl) {
+                setReactValue(promptEl, completedText, window);
+            } else {
+                console.warn('[Wall-E/EVE] Handoff: prompt input not found.');
+            }
+
+            const runBtn = [...document.querySelectorAll('button')]
+                .find(b => /run|generate|ask/i.test(b.textContent));
+
+            if (runBtn) {
+                fireClick(runBtn, window);
+                console.log(`[Wall-E/EVE] Handoff → ${next}, turn ${turnCount + 1}`);
+            } else {
+                console.warn('[Wall-E/EVE] Handoff: generate button not found.');
+            }
+        }, pauseMs);
+    }
+
     // ── Web Speech synthesis ──────────────────────────────────────
 
     function pickVoice() {
@@ -225,10 +325,12 @@
             || voices[0] || null;
     }
 
-    function speakText(text) {
+    // speaker is 'walle' or 'eve' — used for telemetry and handoff routing.
+    function speakText(text, speaker) {
         if (!window.speechSynthesis) return;
         window.speechSynthesis.cancel();
 
+        const spk   = speaker || currentSpeaker;
         const utt   = new SpeechSynthesisUtterance(text);
         const voice = pickVoice();
         if (voice) utt.voice = voice;
@@ -237,8 +339,20 @@
         utt.pitch = 0.85 + (dialValues.WARMTH  / 100) * 0.30;
 
         utt.onstart = () => startAnimation();
-        utt.onend   = () => { stopAnimation(); sendServo(HEAD_BOB_CHANNEL, HEAD_CENTER); };
-        utt.onerror = () => { stopAnimation(); sendServo(HEAD_BOB_CHANNEL, HEAD_CENTER); };
+
+        utt.onend = () => {
+            stopAnimation();
+            sendServo(HEAD_BOB_CHANNEL, HEAD_CENTER);   // return head to rest
+            sendTelemetry(spk, text);                   // log the completed turn
+            if (loopActive && !loopPaused) {
+                scheduleHandoff(text, spk);             // fire next turn
+            }
+        };
+
+        utt.onerror = () => {
+            stopAnimation();
+            sendServo(HEAD_BOB_CHANNEL, HEAD_CENTER);
+        };
 
         window.speechSynthesis.speak(utt);
     }
@@ -263,11 +377,18 @@
         if (streamDebounce) clearTimeout(streamDebounce);
         streamDebounce = setTimeout(() => {
             const final = extractOutputText(container);
-            if (final && final.length > 10 && final !== lastSpokenText) {
-                lastSpokenText = final;
-                console.log('[Wall-E/EVE] Stream complete →', final.slice(0, 60) + '…');
-                speakText(final);
+            if (!final || final.length <= 10 || final === lastSpokenText) return;
+
+            lastSpokenText = final;
+            console.log('[Wall-E/EVE] Stream complete →', final.slice(0, 60) + '…');
+
+            // Check for AI refusal patterns before entering speech pipeline
+            if (isRefusal(final)) {
+                triggerDefensivePosture();
+                return;
             }
+
+            speakText(final, currentSpeaker);
         }, STREAM_END_DEBOUNCE_MS);
     }
 
@@ -622,6 +743,14 @@
                 <div class="wev-sec">
                     <button id="wev-sync-btn" class="wev-btn wev-btn-ghost">↺ Sync all iframes</button>
                     <button id="wev-gen-btn" class="wev-btn wev-btn-primary">▶ Generate</button>
+                    <button id="wev-loop-start" class="wev-btn wev-btn-primary" style="background:#16a34a">♾️ Start Loop</button>
+                    <button id="wev-loop-stop" class="wev-btn wev-btn-ghost" style="display:none">⏹ Stop Loop</button>
+                    <div class="wev-row" style="margin-top:5px">
+                        <span class="wev-lbl">Turn</span>
+                        <span id="wev-turn-count" class="wev-tag">0</span>
+                        <span class="wev-lbl" style="flex:0 0 50px">Speaker</span>
+                        <span id="wev-speaker-tag" class="wev-tag" style="color:#a78bfa">Wall-E</span>
+                    </div>
                 </div>
 
                 <div class="wev-sec">
@@ -787,6 +916,35 @@
             const runBtn = [...document.querySelectorAll('button')]
                 .find(b => /run|generate|ask/i.test(b.textContent));
             if (runBtn) runBtn.click();
+        });
+
+        // "Start Loop" — activate the automated Wall-E ↔ EVE handoff loop
+        document.getElementById('wev-loop-start').addEventListener('click', () => {
+            loopActive     = true;
+            loopPaused     = false;
+            currentSpeaker = 'walle';
+            document.getElementById('wev-loop-start').style.display = 'none';
+            document.getElementById('wev-loop-stop').style.display  = 'block';
+            document.getElementById('wev-speaker-tag').textContent  = 'Wall-E';
+            updateHudStatus('ws', wsReady ? '🟢 Loop active' : '🔴 Relay offline', wsReady ? '#4ade80' : '#f87171');
+            console.log('[Wall-E/EVE] Handoff loop started — Wall-E goes first.');
+            // Kick off by clicking generate immediately
+            const runBtn = [...document.querySelectorAll('button')]
+                .find(b => /run|generate|ask/i.test(b.textContent));
+            if (runBtn) runBtn.click();
+        });
+
+        // "Stop Loop" — halt the loop and return both figures to rest
+        document.getElementById('wev-loop-stop').addEventListener('click', () => {
+            loopActive = false;
+            loopPaused = false;
+            document.getElementById('wev-loop-start').style.display = 'block';
+            document.getElementById('wev-loop-stop').style.display  = 'none';
+            window.speechSynthesis.cancel();
+            stopAnimation();
+            sendServo(HEAD_BOB_CHANNEL, HEAD_CENTER);
+            document.getElementById('wev-speaker-tag').textContent = 'Wall-E';
+            console.log('[Wall-E/EVE] Handoff loop stopped.');
         });
     }
 

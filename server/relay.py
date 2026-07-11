@@ -17,9 +17,11 @@ Run:
 
 import asyncio
 import json
+import os
 import serial
 import serial.tools.list_ports
 import websockets
+from datetime import datetime, timezone
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
@@ -37,6 +39,14 @@ BAUD_RATE: int = 115200
 # The WebSocket server will listen on this host and port.
 WS_HOST: str = "localhost"
 WS_PORT: int = 8765
+
+# Path to the telemetry log file written by append_telemetry().
+# Uses newline-delimited JSON so new entries can be appended without
+# reading or rewriting the whole file.
+# This file is gitignored — see .gitignore.
+LOGS_PATH: str = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "performance_logs.json"
+)
 
 # ── Serial helpers ────────────────────────────────────────────────────────────
 
@@ -67,6 +77,40 @@ def open_serial(port: str) -> serial.Serial:
     return ser
 
 
+# ── Telemetry logging ─────────────────────────────────────────────
+
+def append_telemetry(entry: dict) -> None:
+    """
+    Append one completed-turn record to performance_logs.json.
+
+    The file uses newline-delimited JSON (NDJSON): every line is a valid,
+    self-contained JSON object.  This means:
+      - New entries can be written with a single open-append-close cycle.
+      - Old data is never read into memory or overwritten.
+      - The file can be streamed line-by-line into /play/eval for scoring.
+
+    Expected fields coming from the browser script:
+        type        "telemetry"
+        speaker     "walle" or "eve"
+        text        the full spoken text block
+        turn        sequential turn number in this session
+        char_count  character length of the text
+        speech_rate computed utterance.rate value
+        dials       snapshot of all six dial values (0-100)
+    """
+    entry["timestamp"] = datetime.now(timezone.utc).isoformat()
+    try:
+        with open(LOGS_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+        print(
+            f"[telemetry] Turn {entry.get('turn', '?')} logged — "
+            f"speaker: {entry.get('speaker', '?')} — "
+            f"chars: {entry.get('char_count', '?')}"
+        )
+    except OSError as exc:
+        print(f"[telemetry] Could not write to {LOGS_PATH}: {exc}")
+
+
 # ── WebSocket handler ─────────────────────────────────────────────────────────
 
 async def handle_client(
@@ -88,6 +132,12 @@ async def handle_client(
                 payload = json.loads(raw)
             except json.JSONDecodeError:
                 continue   # silently drop malformed messages
+
+            # Telemetry payloads arrive as a single dict with "type": "telemetry".
+            # Route them straight to the log file and skip servo processing.
+            if isinstance(payload, dict) and payload.get("type") == "telemetry":
+                append_telemetry(payload)
+                continue
 
             commands = payload if isinstance(payload, list) else [payload]
 
