@@ -113,6 +113,31 @@ def append_telemetry(entry: dict) -> None:
 
 # ── WebSocket handler ─────────────────────────────────────────────────────────
 
+async def run_sweep_test(
+    websocket: websockets.ServerConnection,
+    ser: serial.Serial,
+) -> None:
+    """
+    Sweep each servo through a safe range of motion to verify Phase 3 wiring.
+    Sequence per channel: 90° → 130° → 90° → 50° → 90° (500 ms between steps).
+
+    Sends {"type": "sweep_complete"} when all six channels have been tested.
+    Trigger this from the HUD Calibration panel's \"Sweep All\" button.
+    """
+    print("[sweep] Servo sweep test started.")
+    for ch in range(6):
+        for angle in [90, 130, 90, 50, 90]:
+            line = f"S{ch}:{angle}\n"
+            if ser:
+                ser.write(line.encode("ascii"))
+                print(f"[sweep]  ch{ch} \u2192 {angle}\u00b0")
+            else:
+                print(f"[MOCK SWEEP] S{ch}:{angle}")
+            await asyncio.sleep(0.5)
+    print("[sweep] Sweep test complete.")
+    await websocket.send(json.dumps({"type": "sweep_complete"}))
+
+
 async def send_replay(websocket: websockets.ServerConnection) -> None:
     """
     Read performance_logs.json line-by-line and send all valid entries back to
@@ -174,6 +199,18 @@ async def handle_client(
                 await send_replay(websocket)
                 continue
 
+            # Eval feedback: browser reports that the session score dropped below threshold
+            # and that it has already adjusted the dial values. Log the event.
+            if isinstance(payload, dict) and payload.get("type") == "eval_feedback":
+                avg  = payload.get("avg_score", 0)
+                adj  = payload.get("adjustment", 0)
+                print(f"[eval] Feedback: avg_score={avg:.1f}/10 — dial reduction applied: -{adj}")
+                continue
+            # Sweep test: exercise each servo channel in sequence for Phase 3 wiring
+            # verification. The browser sends this from the HUD Calibration panel.
+            if isinstance(payload, dict) and payload.get("type") == "sweep_test":
+                await run_sweep_test(websocket, ser)
+                continue
             commands = payload if isinstance(payload, list) else [payload]
 
             for cmd in commands:

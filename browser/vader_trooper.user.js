@@ -121,6 +121,23 @@
         /\b(sorry|apologize|apologies),?\s*(but|however|I)\b/i,
         /\bThis (request|topic|content|question) (violates|goes against|is (not|inappropriate))\b/i,
     ];
+
+    // Eval score below this average triggers automatic dial and servo adjustment
+    const EVAL_PASS_THRESHOLD = 6.0;
+
+    // Patterns that indicate aggressive dialogue sentiment (2+ matches = 'aggressive')
+    const AGGRESSIVE_PATTERNS = [
+        /\b(furious|rage|wrath|demand|defy|threaten|warn|ultimatum)\b/i,
+        /\b(you (will|must|shall))\b/i,
+        /\b(crush|destroy|defeat|obliterate|eliminate)\b/i,
+        /\b(enemy|traitor|pathetic|foolish|insolent|coward)\b/i,
+    ];
+
+    // Injected into persona backstory textarea when sentiment is aggressive
+    const PERSONA_MODIFIERS = {
+        vader:   ' [INTENSIFIED: channelling greater menace and authority]',
+        trooper: ' [INTENSIFIED: heightened alertness and defensive urgency]',
+    };
     // ──────────────────────────────────────────────────────────────
 
     // ── State ─────────────────────────────────────────────────────
@@ -154,6 +171,10 @@
     let hudBobSpeed    = 50;        // HUD bob-speed slider value (0-100)
     let hudTurnPause   = 30;        // HUD turn-pause slider value (0-100)
     const sessionLog   = [];        // in-memory turn records pushed live to /play/eval
+    let temperatureValue    = 50;   // Temperature slider normalized 0-100 (noise source)
+    let noiseTimer          = null; // setInterval handle for inter-turn servo noise
+    let diffUncertaintyActive = false; // true while diff outputs are divergent
+    let lastSentiment       = 'neutral'; // 'neutral' or 'aggressive'
     // ──────────────────────────────────────────────────────────────
 
     // ── WebSocket ─────────────────────────────────────────────────
@@ -175,7 +196,11 @@
         ws.onmessage = (event) => {
             try {
                 const msg = JSON.parse(event.data);
-                if (msg.type === 'replay_data') handleReplayData(msg.entries || []);
+                if      (msg.type === 'replay_data')    handleReplayData(msg.entries || []);
+                else if (msg.type === 'sweep_complete') {
+                    const el = document.getElementById('vt-cal-status');
+                    if (el) el.textContent = 'Sweep complete \u2713';
+                }
             } catch (_) {}
         };
 
@@ -277,6 +302,7 @@
     function triggerDefensivePosture() {
         window.speechSynthesis.cancel();
         stopAnimation();
+        stopNoiseInterval();   // Feature 1: silence noise on defensive posture
         sendServo(0, 60);
         sendServo(3, 120);
         loopPaused = true;
@@ -322,14 +348,25 @@
         const tag = document.getElementById('vt-speaker-tag');
         if (tag) tag.textContent = next === 'vader' ? 'Darth Vader' : 'Stormtrooper';
 
-        // Sync /play/persona to the incoming speaker's name before they generate
+        // Feature 4: clear any lingering diff uncertainty at turn boundary
+        if (diffUncertaintyActive) resolveDiffUncertainty();
+
+        // Feature 2: detect sentiment of completed turn; inject persona modifier
+        const sentiment = detectSentiment(completedText);
+        lastSentiment = sentiment;
+        updateSentimentDisplay(sentiment);
+
         const personaName = next === 'vader'
             ? (document.getElementById('vt-p-vader')?.value  || 'Darth Vader')
             : (document.getElementById('vt-p-trooper')?.value || 'Imperial Stormtrooper');
         syncPersonaField('NAME', personaName);
+        injectPersonaModifier(sentiment === 'aggressive' ? PERSONA_MODIFIERS[next] : '');
 
         // Map hudTurnPause (0-100) → 200–3000 ms with a small random jitter
         const pauseMs = 200 + Math.round((hudTurnPause / 100) * 2800) + Math.floor(Math.random() * 200);
+
+        // Feature 1: fire temperature noise during inter-turn silence
+        startNoiseInterval();
 
         setTimeout(() => {
             if (!loopActive || loopPaused) return;
@@ -392,6 +429,7 @@
         utt.pitch = 0.85 + (dialValues.WARMTH  / 100) * 0.30;
 
         utt.onstart = () => {
+            stopNoiseInterval();   // Feature 1: silence inter-turn noise during speech
             startAnimation();
             scheduleArmGesture(text, spk);
         };
@@ -693,6 +731,252 @@
         }, gestureAt);
     }
 
+    // ── Dynamic Behaviors ────────────────────────────────────────────────
+
+    // ── Feature 1: Temperature Slider + Physical Noise ────────────
+
+    // Find the Temperature slider, which lives OUTSIDE the tone-dials container
+    // and is explicitly excluded from normal dial binding. We scan for it
+    // separately: an ancestor must mention TEMPERATURE but none of the 6 dials.
+    function findTemperatureSlider(doc) {
+        doc = doc || document;
+        for (const input of doc.querySelectorAll('input[type="range"]:not([disabled])')) {
+            if (bound.has(input)) continue;
+            let node = input.parentElement;
+            for (let d = 0; d < 5 && node; d++) {
+                const text = (node.textContent || '').toUpperCase();
+                if (
+                    text.includes('TEMPERATURE') &&
+                    !Object.keys(DIAL_CHANNEL).some(n => text.includes(n))
+                ) return input;
+                node = node.parentElement;
+            }
+        }
+        return null;
+    }
+
+    function initTemperatureBinding() {
+        const input = findTemperatureSlider(document);
+        if (!input) { setTimeout(initTemperatureBinding, 2000); return; }
+        if (bound.has(input)) return;
+
+        const readTemp = () => {
+            const min = parseFloat(input.min) || 0;
+            const max = parseFloat(input.max) || 1;
+            temperatureValue = toNormalized(parseFloat(input.value) || 0, min, max);
+            const el = document.getElementById('vt-temp-val');
+            if (el) el.textContent = temperatureValue;
+        };
+
+        input.addEventListener('input', () => {
+            readTemp();
+            if (!animationTimer) startNoiseInterval();   // recompute interval immediately
+        });
+        bound.add(input);
+        readTemp();
+        console.log('[Vader/Trooper] Temperature slider bound, value:', temperatureValue);
+    }
+
+    // Inject a random small deviation on a random servo channel to simulate
+    // physical restlessness. Only fires during silence (no speech animation).
+    function applyTemperatureNoise() {
+        if (animationTimer) return;
+        if (temperatureValue < 5) return;
+        const maxDev = Math.round((temperatureValue / 100) * 8);   // up to ±8°
+        const ch     = Math.floor(Math.random() * 6);
+        const dev    = (Math.random() * 2 - 1) * maxDev;
+        const angle  = Math.round(Math.max(0, Math.min(180, 90 + dev)));
+        sendServo(ch, angle);
+        setTimeout(() => { if (!animationTimer) sendServo(ch, 90); }, 120 + Math.random() * 180);
+    }
+
+    function startNoiseInterval() {
+        stopNoiseInterval();
+        if (temperatureValue < 5) return;
+        const intervalMs = Math.round(2000 - (temperatureValue / 100) * 1500);   // 2000→500 ms
+        noiseTimer = setInterval(applyTemperatureNoise, intervalMs);
+    }
+
+    function stopNoiseInterval() {
+        if (noiseTimer) { clearInterval(noiseTimer); noiseTimer = null; }
+    }
+
+    // ── Feature 2: Sentiment-Driven Persona Injection ────────────
+
+    function detectSentiment(text) {
+        return AGGRESSIVE_PATTERNS.filter(p => p.test(text)).length >= 2
+            ? 'aggressive' : 'neutral';
+    }
+
+    // Append (or clear) an emotional modifier on the largest textarea inside
+    // /play/persona — most likely the backstory or description field.
+    // Uses the React native-prototype setter so the app registers the change.
+    function injectPersonaModifier(modifier) {
+        const frame = iframes.persona;
+        if (!frame || !frame.ready) return;
+        const doc = frame.el.contentDocument;
+        const win = frame.el.contentWindow;
+        const textareas = [...doc.querySelectorAll('textarea')];
+        if (!textareas.length) return;
+        const target = textareas.reduce((a, b) =>
+            (b.value || '').length >= (a.value || '').length ? b : a
+        );
+        const cleaned = (target.value || '')
+            .replace(/\s*\[INTENSIFIED:[^\]]*\]/g, '').trimEnd();
+        setReactValue(target, modifier ? cleaned + modifier : cleaned, win);
+    }
+
+    function updateSentimentDisplay(sentiment) {
+        const el = document.getElementById('vt-sentiment');
+        if (!el) return;
+        el.textContent = sentiment;
+        el.style.color  = sentiment === 'aggressive' ? '#f87171' : '#4ade80';
+    }
+
+    // ── Feature 3: Eval Closed-Loop Feedback ────────────────
+
+    // Extract an average numeric score from the eval AI's response.
+    // Looks for “N/10” patterns produced by EVAL_SCORING_CRITERIA.
+    function parseEvalScore(text) {
+        const scores = [...text.matchAll(/\b(\d+(?:\.\d+)?)\s*\/\s*10\b/g)]
+            .map(m => parseFloat(m[1]))
+            .filter(n => n >= 0 && n <= 10);
+        return scores.length
+            ? scores.reduce((a, b) => a + b, 0) / scores.length
+            : null;
+    }
+
+    // Attach a one-shot MutationObserver on the eval iframe output area.
+    // When the scoring response streams in, parse the score and apply feedback.
+    function monitorEvalOutput() {
+        const frame = iframes.eval;
+        if (!frame || !frame.ready) return;
+        const doc     = frame.el.contentDocument;
+        const outputEl = findOutputSection(doc);
+        if (!outputEl) return;
+
+        let evalDebounce = null;
+        const observer   = new MutationObserver(() => {
+            if (evalDebounce) clearTimeout(evalDebounce);
+            evalDebounce = setTimeout(() => {
+                const avgScore = parseEvalScore((outputEl.textContent || '').trim());
+                if (avgScore !== null) {
+                    applyEvalFeedback(avgScore);
+                    observer.disconnect();   // one-shot; re-attached on next runEvalScoring()
+                }
+            }, 1500);
+        });
+        observer.observe(outputEl, { childList: true, subtree: true, characterData: true });
+    }
+
+    // If avg session score < EVAL_PASS_THRESHOLD: reduce ENERGY and VERBOSITY,
+    // push updates to the main page, all iframes, and the physical servos.
+    function applyEvalFeedback(avgScore) {
+        if (avgScore >= EVAL_PASS_THRESHOLD) {
+            updateEvalStatus(`Score ${avgScore.toFixed(1)}/10 — pass ✓`);
+            return;
+        }
+        const reduction = Math.round((1 - avgScore / EVAL_PASS_THRESHOLD) * 30);
+
+        ['ENERGY', 'VERBOSITY'].forEach(name => {
+            const newVal = Math.max(10, dialValues[name] - reduction);
+            dialValues[name] = newVal;
+            const slider = document.getElementById(`vt-dial-${name.toLowerCase()}`);
+            const label  = document.getElementById(`vt-dial-${name.toLowerCase()}-val`);
+            if (slider) slider.value = newVal;
+            if (label)  label.textContent = newVal;
+            pushDialToMainPage(name, newVal);
+            for (const [, frame] of Object.entries(iframes)) {
+                if (frame.ready)
+                    syncDialInDoc(frame.el.contentDocument, frame.el.contentWindow, name, newVal);
+            }
+            sendServo(DIAL_CHANNEL[name], Math.round((newVal / 100) * 180));
+        });
+
+        // Return both heads to calm neutral
+        sendServo(HEAD_BOB_CHANNEL, HEAD_CENTER);
+        sendServo(TROOPER_HEAD_CHANNEL, HEAD_CENTER);
+
+        // Log the feedback event to relay.py
+        if (wsReady && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'eval_feedback', avg_score: avgScore, adjustment: reduction,
+            }));
+        }
+
+        updateEvalStatus(`Score ${avgScore.toFixed(1)}/10 — dials ↓${reduction}`);
+        console.log(`[Vader/Trooper] Eval feedback: ${avgScore.toFixed(1)}/10 — reduced dials by ${reduction}`);
+    }
+
+    // ── Feature 4: Diff Uncertainty Visualization ────────────────
+
+    // Jaccard word-overlap similarity between two text blocks (0=nothing in
+    // common, 1=identical word sets). Used to detect divergent diff outputs.
+    function textSimilarity(a, b) {
+        const wA = new Set((a.toLowerCase().match(/\b\w+\b/g) || []));
+        const wB = new Set((b.toLowerCase().match(/\b\w+\b/g) || []));
+        const intersection = [...wA].filter(w => wB.has(w)).length;
+        const union = new Set([...wA, ...wB]).size;
+        return union === 0 ? 1 : intersection / union;
+    }
+
+    // Set up a persistent MutationObserver on the diff iframe body.
+    // Called once when the diff iframe becomes ready.
+    function initDiffMonitor() {
+        const frame = iframes.diff;
+        if (!frame || !frame.ready) { setTimeout(initDiffMonitor, 3000); return; }
+        const doc = frame.el.contentDocument;
+
+        let diffDebounce = null;
+        new MutationObserver(() => {
+            if (diffDebounce) clearTimeout(diffDebounce);
+            diffDebounce = setTimeout(() => checkDiffOutputs(doc), 1200);
+        }).observe(doc.body, { childList: true, subtree: true, characterData: true });
+
+        console.log('[Vader/Trooper] Diff divergence monitor active.');
+    }
+
+    // Compare the two richest output-like text blocks in the diff page.
+    // Similarity < 0.35 (< 35 % shared vocabulary) = wildly divergent outputs.
+    function checkDiffOutputs(doc) {
+        const panels = [...doc.querySelectorAll('div, section, article')]
+            .filter(el => {
+                const len = (el.textContent || '').trim().length;
+                if (len < 80 || len > 3000) return false;
+                // Prefer leaf-ish elements: own text should dominate sub-element text
+                const subLen = [...el.querySelectorAll('div, section')]
+                    .reduce((s, c) => s + (c.textContent || '').trim().length, 0);
+                return subLen < len * 0.6;
+            })
+            .sort((a, b) => b.textContent.length - a.textContent.length)
+            .slice(0, 2);
+
+        if (panels.length < 2) return;
+        const sim = textSimilarity(panels[0].textContent, panels[1].textContent);
+        if (sim < 0.35 && !diffUncertaintyActive) triggerDiffUncertainty();
+        else if (sim >= 0.35 && diffUncertaintyActive) resolveDiffUncertainty();
+    }
+
+    // Stormtrooper head rapid pan (ch 3) + Vader arm raises and holds (ch 2).
+    function triggerDiffUncertainty() {
+        diffUncertaintyActive = true;
+        let panStep = 0;
+        const panTimer = setInterval(() => {
+            sendServo(3, panStep % 2 === 0 ? 60 : 120);
+            if (++panStep >= 6) clearInterval(panTimer);   // 3 full side-to-side swings
+        }, 200);
+        sendServo(2, 135);   // Vader arm up and holds
+        updateHudStatus('diff', '⚠️ Divergent', '#f59e0b');
+        console.log('[Vader/Trooper] Diff divergence — Trooper panning, Vader arm raised.');
+    }
+
+    function resolveDiffUncertainty() {
+        diffUncertaintyActive = false;
+        sendServo(2, 90);           // Vader arm returns
+        sendServo(3, HEAD_CENTER);  // Trooper head re-centres
+        updateHudStatus('diff', '✓ Converged', '#4ade80');
+    }
+
     // Push the in-memory session log as formatted text into /play/eval's prompt input.
     function pushToEval() {
         const frame = iframes.eval;
@@ -713,6 +997,7 @@
         pushToEval();
         const frame = iframes.eval;
         if (!frame || !frame.ready) { updateEvalStatus('Eval iframe not ready'); return; }
+        monitorEvalOutput();   // Feature 3: listen for score before triggering generation
         const doc = frame.el.contentDocument;
         const win = frame.el.contentWindow;
         const runBtn = [...doc.querySelectorAll('button')]
@@ -802,6 +1087,7 @@
                             syncDialInDoc(doc, iframe.contentWindow, name, val);
                         }
                         syncModelToIframes(selectedModel);
+                        if (key === 'diff') initDiffMonitor();   // Feature 4
                     } catch (_) {
                         iframes[key].ready = false;
                         updateHudStatus(key, '🔴 Blocked', '#f87171');
@@ -875,6 +1161,11 @@
                 <div class="vt-sec">
                     <div class="vt-sec-title">TONE DIALS</div>
                     ${dialRows}
+                    <div class="vt-row" style="border-top:1px solid #1e1e26;margin-top:3px;padding-top:3px">
+                        <span class="vt-lbl">TEMP</span>
+                        <span id="vt-temp-val" class="vt-tag" style="color:#facc15">—</span>
+                        <span style="font-size:9px;color:#52525b;flex:1;text-align:right">noise src</span>
+                    </div>
                 </div>
 
                 <div class="vt-sec">
@@ -883,6 +1174,10 @@
                     <input type="text" id="vt-p-vader" class="vt-input" placeholder="Darth Vader" value="Darth Vader">
                     <div class="vt-row" style="margin-top:6px"><span class="vt-lbl">Stormtrooper</span></div>
                     <input type="text" id="vt-p-trooper" class="vt-input" placeholder="Stormtrooper" value="Stormtrooper">
+                    <div class="vt-row" style="margin-top:5px">
+                        <span class="vt-lbl">Sentiment</span>
+                        <span id="vt-sentiment" class="vt-tag" style="color:#4ade80">neutral</span>
+                    </div>
                 </div>
 
                 <div class="vt-sec">
@@ -926,6 +1221,25 @@
                     <button id="vt-score-btn" class="vt-btn vt-btn-primary" style="background:#0891b2">📊 Score Session</button>
                     <button id="vt-replay-btn" class="vt-btn vt-btn-ghost">📋 Load Replay</button>
                     <div id="vt-eval-status" style="font-size:10px;color:#52525b;margin-top:4px;padding:0 2px">—</div>
+                </div>
+
+                <div class="vt-sec">
+                    <div class="vt-sec-title">CALIBRATION</div>
+                    <select id="vt-cal-ch" style="background:#141418;border:1px solid #2a2a35;color:#d4d4d8;padding:3px 6px;border-radius:4px;font-size:11px;width:100%;box-sizing:border-box;margin-bottom:5px">
+                        <option value="0">CH 0 — Vader head</option>
+                        <option value="1">CH 1 — Vader torso</option>
+                        <option value="2">CH 2 — Vader arm</option>
+                        <option value="3">CH 3 — Trooper head</option>
+                        <option value="4">CH 4 — Trooper torso</option>
+                        <option value="5">CH 5 — Trooper arm</option>
+                    </select>
+                    <div class="vt-row">
+                        <span class="vt-lbl">Angle</span>
+                        <input type="range" id="vt-cal-angle" class="vt-slider" min="0" max="180" value="90">
+                        <span id="vt-cal-angle-val" class="vt-num">90</span>
+                    </div>
+                    <button id="vt-sweep-btn" class="vt-btn vt-btn-ghost">⚙ Sweep All Channels</button>
+                    <div id="vt-cal-status" style="font-size:10px;color:#52525b;margin-top:4px;padding:0 2px">—</div>
                 </div>
 
                 <div class="vt-sec">
@@ -1143,6 +1457,8 @@
             document.getElementById('vt-loop-stop').style.display  = 'none';
             window.speechSynthesis.cancel();
             stopAnimation();
+            stopNoiseInterval();
+            if (diffUncertaintyActive) resolveDiffUncertainty();
             sendServo(HEAD_BOB_CHANNEL, HEAD_CENTER);
             document.getElementById('vt-speaker-tag').textContent = 'Darth Vader';
             console.log('[Vader/Trooper] Handoff loop stopped.');
@@ -1153,6 +1469,36 @@
 
         // "Load Replay" — fetch full performance_logs.json from relay.py and load into /play/eval
         document.getElementById('vt-replay-btn').addEventListener('click', loadReplay);
+
+        // Calibration: direct per-channel servo control for Phase 4 angle-limit tuning
+        const calCh    = document.getElementById('vt-cal-ch');
+        const calAngle = document.getElementById('vt-cal-angle');
+        const calVal   = document.getElementById('vt-cal-angle-val');
+        if (calAngle) {
+            calAngle.addEventListener('input', () => {
+                calVal.textContent = calAngle.value;
+                sendServo(parseInt(calCh.value, 10), parseInt(calAngle.value, 10));
+            });
+        }
+        if (calCh) {
+            // Switching channel resets slider to 90° so each channel starts from neutral
+            calCh.addEventListener('change', () => {
+                calAngle.value = 90;
+                calVal.textContent = 90;
+                sendServo(parseInt(calCh.value, 10), 90);
+            });
+        }
+
+        // "Sweep All" — relay.py exercises every channel for Phase 3 wiring verification
+        document.getElementById('vt-sweep-btn').addEventListener('click', () => {
+            const statusEl = document.getElementById('vt-cal-status');
+            if (!wsReady || ws.readyState !== WebSocket.OPEN) {
+                if (statusEl) statusEl.textContent = 'Relay offline';
+                return;
+            }
+            ws.send(JSON.stringify({ type: 'sweep_test' }));
+            if (statusEl) statusEl.textContent = 'Sweeping…';
+        });
     }
 
     // Update a status label in the HUD by its key name.
@@ -1177,5 +1523,6 @@
     injectIframes();
     waitForDials();
     initOutputMonitoring();
+    initTemperatureBinding();
 
 })();

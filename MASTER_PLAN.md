@@ -403,6 +403,17 @@ RobotProject/
 - [x] Persona sync on handoff — active speaker's name pushed to /play/persona NAME field before each generation fires
 - [x] /play/eval live feed — `sessionLog` accumulates per-turn records; `pushToEval()` writes formatted transcript to eval iframe after every completed turn
 - [x] Model list updated — Claude Sonnet/Opus 4, GPT-4.1, Llama 4 Maverick/Scout added as primary options
+- [x] Temperature slider integrated — `findTemperatureSlider()` captures it outside the tone-dials scope; drives physical noise engine (random ±8° servo deviations at 500–2000 ms intervals, scaled by temperature value) during inter-turn silence
+- [x] Sentiment-driven persona injection — `detectSentiment()` classifies completed turns; `injectPersonaModifier()` appends intensity tag to the largest `/play/persona` textarea when 2+ aggressive patterns match
+- [x] Eval closed-loop feedback — `monitorEvalOutput()` reads the eval iframe stream; `applyEvalFeedback()` lowers ENERGY and VERBOSITY dials and returns both heads to neutral when avg score < 6.0/10
+- [x] Diff uncertainty visualization — `initDiffMonitor()` watches `/play/diff`; Jaccard similarity < 0.35 triggers Trooper head side-pan (ch 3) and Vader arm raise-and-hold (ch 2) until outputs converge
+
+> **All software tooling for Phases 3 and 4 is complete as of 2026-07-11.** The firmware now has
+> configurable per-servo soft limits (`SOFT_MIN_ANGLE` / `SOFT_MAX_ANGLE` arrays) that clamp each
+> channel independently. `relay.py` has `run_sweep_test()` which exercises all six channels in
+> sequence over serial. The HUD **CALIBRATION** panel provides a per-channel angle slider for
+> direct servo control and a **Sweep All Channels** button. All tooling is ready and waiting for
+> the physical hardware build steps below.
 
 ### Phase 3 — Physical Build (hardware)
 - [ ] Stage base constructed with servo mounting positions
@@ -411,8 +422,8 @@ RobotProject/
 - [ ] Power supply isolated and verified safe
 
 ### Phase 4 — Integration & Calibration
-- [ ] Per-servo angle limits tuned to physical stop points of each figure
-- [ ] Tone dial → servo speed mapping calibrated
+- [ ] Per-servo angle limits tuned — move each figure joint by hand to find physical stops; update `SOFT_MIN_ANGLE` / `SOFT_MAX_ANGLE` in firmware; use HUD Calibration slider to confirm servo obeys limits
+- [ ] Tone dial → servo speed mapping calibrated — run the autonomous loop and adjust the ENERGY/VERBOSITY animation interval formula until head-bob speed matches speech cadence
 - [ ] Full autonomous loop tested for 10+ minutes without intervention
 
 ### Phase 5 — Evaluation & Scoring
@@ -422,4 +433,4 @@ RobotProject/
 
 ---
 
-*Last updated: 2026-07-11 — v3.3.0 + Phase 5 complete: five-dimension eval scoring criteria, `runEvalScoring()`, `send_replay()` in relay.py, `loadReplay()` + `handleReplayData()` in browser, EVALUATION HUD section with Score Session and Load Replay buttons, `ws.onmessage` receiver added. All software todos resolved.*
+*Last updated: 2026-07-11 — v3.4.0: Temperature noise engine, sentiment-driven persona injection, eval closed-loop feedback, diff uncertainty visualization, per-servo soft limits in firmware (`SOFT_MIN_ANGLE`/`SOFT_MAX_ANGLE`), `run_sweep_test()` in relay.py, HUD CALIBRATION panel with per-channel slider and Sweep All button. All software todos complete — awaiting hardware for Phases 3 and 4.*

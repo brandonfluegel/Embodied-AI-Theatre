@@ -43,6 +43,14 @@ static const uint8_t  PWM_FREQ_HZ = 50;    // standard servo frequency
 static const uint8_t  NUM_SERVOS             = 6;
 static const int      HOME_ANGLE[NUM_SERVOS] = {90, 90, 90, 90, 90, 90};
 
+// Per-servo soft angle limits — tune these during Phase 4 calibration to match
+// the physical stop points of each figure and prevent tendon over-pull.
+// Edit SOFT_MIN / SOFT_MAX, then use the HUD Calibration panel to verify.
+//   ch0 = Vader head   ch1 = Vader torso    ch2 = Vader arm tendon
+//   ch3 = Trpr head    ch4 = Trpr torso     ch5 = Trpr arm tendon
+static const int SOFT_MIN_ANGLE[NUM_SERVOS] = { 70,  45,  60,  60,  60,  60};
+static const int SOFT_MAX_ANGLE[NUM_SERVOS] = {110, 135, 150, 120, 120, 150};
+
 static const uint8_t  BUF_SIZE    = 16;
 static char           inputBuf[BUF_SIZE];
 static uint8_t        bufIndex    = 0;
@@ -58,6 +66,9 @@ uint16_t angleToPulse(int angle) {
 }
 
 void moveServo(uint8_t ch, int angle) {
+    // Clamp to per-servo soft limits before converting to pulse count.
+    // Adjust SOFT_MIN_ANGLE / SOFT_MAX_ANGLE during Phase 4 calibration.
+    angle = constrain(angle, SOFT_MIN_ANGLE[ch], SOFT_MAX_ANGLE[ch]);
     pca.setPWM(ch, 0, angleToPulse(angle));
 }
 
