@@ -1,8 +1,8 @@
-﻿# Darth Vader & Imperial Stormtrooper -- Embodied AI Theatre
+﻿# Embodied AI Theatre -- Featuring Darth Vader & Stormtrooper
 
-A personal project by **Brandon Fluegel, PhD** (Human Factors Psychology). Built for fun and for three specific purposes: stress-testing [shape-models.com](https://www.shape-models.com/play/tone) as a real-time platform, studying what embodied AI actually feels like when it occupies physical space, and pushing my own limits in software engineering and physical fabrication.
+A personal project by **Brandon Fluegel**. I'm experimenting with [shape-models.com](https://www.shape-models.com/play/tone), seeing how far I can push it as a live AI platform, and using that as an excuse to get into servo control, tendon mechanics, and physical fabrication.
 
-Two Hasbro Star Wars Black Series figures -- Darth Vader and an Imperial Stormtrooper -- hold live spoken debates driven by real AI language models. A browser script intercepts streaming tokens, speaks them aloud, and fires servo commands over USB so the figures move their heads, torsos, and arms in sync with every word. No one touches anything once the loop starts.
+The setup: two Hasbro Star Wars Black Series figures sit on a stage. Darth Vader and a Stormtrooper take turns speaking to each other, driven by real AI running in the browser. When one talks, his head bobs with the words, his arm lifts, his torso turns. The other one reacts. Nobody touches anything -- it just goes.
 
 ---
 
