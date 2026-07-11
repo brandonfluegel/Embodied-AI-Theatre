@@ -1,12 +1,8 @@
-# Darth Vader & Imperial Stormtrooper — Embodied AI Theatre
+﻿# Darth Vader & Imperial Stormtrooper -- Embodied AI Theatre
 
-## What is Embodied AI?
+A personal project by **Brandon Fluegel, PhD** (Human Factors Psychology). Built for fun and for three specific purposes: stress-testing [shape-models.com](https://www.shape-models.com/play/tone) as a real-time platform, studying what embodied AI actually feels like when it occupies physical space, and pushing my own limits in software engineering and physical fabrication.
 
-Traditional AI lives behind a flat screen — text goes in, text comes out, and the entire experience stays digital and disembodied. **Embodied AI** is the idea that artificial intelligence should also exist in the physical world: speaking out loud with a real voice, occupying real space, and moving a physical body that an audience can watch.
-
-This project builds a fully autonomous embodied AI theatre on a desktop. Two Hasbro Star Wars Black Series action figures — Darth Vader and an Imperial Stormtrooper — hold live spoken debates powered by real AI language models. They speak aloud through the computer speakers. Their heads move, torsos twist, and arms rise in physical sync with every word. No human touches anything once the loop starts.
-
-The AI system running the debate lives at [shape-models.com/play/tone](https://www.shape-models.com/play/tone). A browser script intercepts the text as it streams, converts it to speech, and simultaneously fires rapid position commands over USB to servo motors hidden beneath the display stage. Darth Vader’s head bobs with every syllable. The Stormtrooper reacts with head turns and a body lean. A Python relay server logs every spoken turn to a telemetry file for later review in the evaluation lab.
+Two Hasbro Star Wars Black Series figures -- Darth Vader and an Imperial Stormtrooper -- hold live spoken debates driven by real AI language models. A browser script intercepts streaming tokens, speaks them aloud, and fires servo commands over USB so the figures move their heads, torsos, and arms in sync with every word. No one touches anything once the loop starts.
 
 ---
 
