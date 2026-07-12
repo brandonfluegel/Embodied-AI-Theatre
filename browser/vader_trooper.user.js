@@ -1096,6 +1096,40 @@
         }
     }
 
+    // ── Initial state sync ─────────────────────────────────────────
+    //
+    // Pushes every current HUD value (Model, Tone Dials, Pacing, Refusal threshold)
+    // to both the main /play/tone page DOM and every ready iframe contentDocument.
+    // Uses the native HTMLInputElement/HTMLSelectElement prototype setter and fires
+    // bubbling input + change events so React state picks up each value immediately.
+    //
+    // Called automatically once all 5 hidden iframes have reached 'Ready', and also
+    // bound directly to the ↺ Sync all iframes HUD button.
+    function syncAll() {
+        // 1 ── Model → main page model selector + all iframes
+        for (const el of document.querySelectorAll('select, [role="combobox"]')) {
+            const t = (el.textContent || '').toLowerCase();
+            if (t.includes('1b') || t.includes('gpt') || t.includes('claude') || t.includes('llama')) {
+                setReactValue(el, selectedModel, window);
+            }
+        }
+        syncModelToIframes(selectedModel);
+
+        // 2 ── Tone dials → main page tone-dial inputs + all iframes
+        for (const [name, val] of Object.entries(dialValues)) {
+            pushDialToMainPage(name, val);
+        }
+        syncAllDials();
+
+        // 3 ── Pacing sliders → choreographer iframe
+        syncChoreographerSlider(0, hudBobSpeed);
+        syncChoreographerSlider(1, hudTurnPause);
+
+        // 4 ── Refusal threshold → refusal iframe
+        const refusalEl = document.getElementById('vt-refusal');
+        if (refusalEl) syncRefusalThreshold(parseInt(refusalEl.value, 10));
+    }
+
     // ── Iframe manager ────────────────────────────────────────────
 
     function injectIframes() {
@@ -1121,6 +1155,13 @@
                         }
                         syncModelToIframes(selectedModel);
                         if (key === 'diff') initDiffMonitor();   // Feature 4
+                        // Once every iframe has successfully reached Ready, run a full
+                        // initial sync so the main page and all iframes share the HUD's
+                        // default Model, Tone Dials, Pacing, and Refusal values from the
+                        // moment the page finishes loading — no manual Sync click needed.
+                        if (Object.values(iframes).every(f => f.ready)) {
+                            syncAll();
+                        }
                     } catch (_) {
                         iframes[key].ready = false;
                         updateHudStatus(key, '🔴 Blocked', '#f87171');
@@ -1465,11 +1506,8 @@
             syncPersonaField('ROLE', e.target.value);
         });
 
-        // "Sync All" — force-push every current HUD value to every ready iframe
-        document.getElementById('vt-sync-btn').addEventListener('click', () => {
-            syncAllDials();
-            syncModelToIframes(selectedModel);
-        });
+        // "Sync All" — force-push every current HUD value to the main page and every ready iframe
+        document.getElementById('vt-sync-btn').addEventListener('click', syncAll);
 
         // "Generate" — click the main page's primary run button
         document.getElementById('vt-gen-btn').addEventListener('click', () => {
