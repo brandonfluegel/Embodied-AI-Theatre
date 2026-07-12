@@ -1,7 +1,7 @@
 # MASTER PLAN
 ## Darth Vader & Imperial Stormtrooper — Autonomous Physical-Digital AI Theatre
 ### Architectural Blueprint & Source of Truth
-### Current Version: v3.4.0 — Full Dual-Character Embodied Loop + Dynamic Behaviour Systems
+### Current Version: v3.4.1 — Auto Initial-State Sync on Load
 
 ---
 
@@ -233,7 +233,7 @@ The HUD is a fixed-position panel, 272 px wide, anchored to the right edge of th
 | Refusal Threshold | Pushes live to /play/refusal's first boundary range control via React-compatible setter |
 | Evaluation | “📊 Score Session” pushes `sessionLog` + five-dimension scoring criteria to `/play/eval` and clicks generate; “📋 Load Replay” fetches `performance_logs.json` from relay.py and populates `/play/eval` for scoring of past sessions |
 | Iframe Status | Live 🟢/🟡/🔴 indicator for each of the five background iframes |
-| Sync All | Force-pushes all current HUD values to every ready iframe at once |
+| Sync All | Calls `syncAll()` — pushes Model, Tone Dials, Pacing, and Refusal Threshold to the main `/play/tone` DOM **and** every ready iframe simultaneously; also fires automatically on page load once all 5 iframes reach Ready, eliminating HUD-vs-page startup desync without a manual click |
 | Generate | Triggers the main page's Run button from the HUD without touching the keyboard |
 
 ---
@@ -266,6 +266,19 @@ Every iframe has a live status row in the Master HUD:
 - 🟢 Ready — React has hydrated and the DOM can be driven by the parent
 - 🔴 Blocked — the page returned an error or refused iframe embedding
 
+### Auto Initial-State Sync
+
+A persistent startup desync previously existed between the HUD's default values (e.g. the Model dropdown showing "Claude Sonnet 4") and the native page state (e.g. the site's own selector still showing "Llama 3.2 1B"). The values only aligned when the operator manually clicked ↺ Sync all iframes.
+
+This is resolved by a readiness gate inside `injectIframes()`. After each iframe's 2500 ms hydration timer fires and marks the frame Ready, the script checks `Object.values(iframes).every(f => f.ready)`. When the last of the 5 iframes crosses that threshold, `syncAll()` runs once automatically:
+
+1. **Model** — scans `<select>` / `[role="combobox"]` on the main `/play/tone` page with the native prototype setter + bubbling `input`/`change` events, then calls `syncModelToIframes` for all iframes.
+2. **Tone dials** — `pushDialToMainPage` writes each of the 6 dials to the native sliders on the main page; `syncAllDials` mirrors them to all iframes.
+3. **Pacing** — `syncChoreographerSlider(0, hudBobSpeed)` and `syncChoreographerSlider(1, hudTurnPause)` push the HUD defaults to the choreographer iframe.
+4. **Refusal threshold** — `syncRefusalThreshold` reads the HUD slider value and pushes it to the refusal iframe.
+
+The ↺ Sync all iframes HUD button is now bound directly to `syncAll()`, covering all four steps including the main page model selector and pacing/refusal controls that the previous two-liner missed.
+
 ---
 
 ## 7. React-Compatible DOM Mirroring
@@ -295,6 +308,8 @@ HUD slider moves
 ```
 
 Model selection and persona field changes follow the same pattern, targeting `<select>` / `[role="combobox"]` elements and `<input type="text">` elements respectively.
+
+`syncAll()` performs all four cascades (Model, Tone Dials, Pacing, Refusal Threshold) in a single call. It fires automatically once all 5 iframes reach Ready on initial page load and is also bound to the ↺ Sync all iframes HUD button.
 
 ---
 
@@ -368,7 +383,7 @@ RobotProject/
 ├── .gitignore
 │
 ├── browser/
-│   └── vader_trooper.user.js           ← v3.4.0 unified matrix userscript
+│   └── vader_trooper.user.js           ← v3.4.1 unified matrix userscript
 │
 ├── server/
 │   ├── relay.py                        ← Python WebSocket server + serial relay
@@ -392,12 +407,13 @@ RobotProject/
 
 ## 10. Development Checklist
 
-> **Status as of 2026-07-11 — Software pipeline v3.4.0. Digital stack complete with four active dynamic behaviour layers.**
+> **Status as of 2026-07-11 — Software pipeline v3.4.1. Digital stack complete with four active dynamic behaviour layers.**
 > Both figures animate independently per speaker. Temperature drives physical noise between turns. Dialogue
 > sentiment automatically modulates the /play/persona backstory. The eval iframe feeds a closed-loop score
 > monitor that adjusts live dial values. The /play/diff iframe triggers physical uncertainty responses.
 > Firmware has per-servo soft limits; relay.py has a sweep-test; HUD has a full Calibration panel.
-> All software work is complete — Phase 3 begins the moment hardware components arrive.
+> All 5 iframes now auto-sync HUD defaults (Model, Tone Dials, Pacing, Refusal) to the main page and all
+> iframes on load — no manual Sync click required. All software work is complete — awaiting hardware.
 
 ### Phase 1 — Digital Pipeline (software only)
 - [x] `relay.py` — WebSocket server receives dial data, forwards to ESP32 via serial
@@ -434,12 +450,15 @@ RobotProject/
 - [x] Loop health watchdog — 15-second interval checks elapsed time since last turn; HUD shows ⚠️ Loop stalled after 90 s of inactivity
 - [x] Session timer + animation tick-rate meter — HUD displays elapsed loop time (m:ss) updated each turn; live ticks/s display refreshes every 2 s during speech for Phase 4 speed calibration
 - [x] `.gitignore` created — `server/performance_logs.json`, Python bytecode, Arduino build artefacts, and OS files excluded
+- [x] Auto initial-state sync on load — `syncAll()` fires automatically once all 5 iframes reach Ready; pushes HUD defaults for Model (main page + all iframes via native prototype setter + bubbling events), Tone Dials (main page + all iframes), Pacing (choreographer iframe), and Refusal Threshold (refusal iframe); eliminates the startup desync between HUD defaults and the native page state; ↺ Sync all iframes button now calls `syncAll()` directly, also covering the main page model selector and pacing/refusal controls that the previous two-liner missed
 
 > **All software tooling for Phases 3 and 4 is complete as of 2026-07-11.** The firmware has
 > per-servo soft limits and echoes `ACK:S<ch>:<angle>` after each command. `relay.py` has a
 > full sweep, single-channel test, and live serial-ACK reader. The HUD CALIBRATION panel has
 > per-channel slider, ▶ Test CH, ↓ Set Min, ↑ Set Max, and Sweep All. The loop section shows a
-> session timer, live animation ticks/s, and a health watchdog. Awaiting hardware.
+> session timer, live animation ticks/s, and a health watchdog. v3.4.1 adds automatic full-state
+> sync on page load — HUD defaults propagate to the main page and all iframes immediately without
+> a manual Sync click. Awaiting hardware.
 
 ### Phase 3 — Physical Build (hardware)
 - [ ] Stage base constructed with servo mounting positions
@@ -459,4 +478,4 @@ RobotProject/
 
 ---
 
-*Last updated: 2026-07-11 — v3.4.0 final: firmware serial ACK, relay.py single-channel test + serial reader, HUD ▶ Test CH / ↓ Set Min / ↑ Set Max calibration buttons, session timer, animation tick-rate meter, loop health watchdog, `.gitignore` added. All software todos exhausted — project ready for Phase 3 hardware build.*
+*Last updated: 2026-07-11 — v3.4.1 patch: `syncAll()` auto-triggers on page load once all 5 iframes reach Ready, eliminating HUD-vs-page startup desync; four-step cascade pushes Model, Tone Dials, Pacing, and Refusal Threshold to the main `/play/tone` DOM and all iframes via native prototype setter + bubbling events; ↺ Sync all iframes button expanded to cover main page model selector and pacing/refusal controls. All software todos exhausted — project ready for Phase 3 hardware build.*
