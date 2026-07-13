@@ -32,7 +32,7 @@ This is a Tampermonkey userscript that lives inside Google Chrome. It drives the
 - Reads the six tone dials and the Temperature slider: dials shape voice rate and motor intervals; Temperature drives a physical noise engine that twitches servos at random intervals during silence
 - Detects aggressive dialogue sentiment and injects emotional intensity modifiers into the /play/persona backstory in real time
 - Monitors the /play/eval iframe’s scoring output and automatically lowers ENERGY and VERBOSITY dials if session quality drops below threshold
-- Watches the /play/diff iframe for wildly divergent outputs and triggers a Stormtrooper head-pan and Vader arm-hold response
+- Watches the /play/diff iframe for wildly divergent outputs and triggers a Stormtrooper torso-twist shake and Vader shoulder-hold response
 - Provides a floating HUD sidebar with sections for model selection, tone dials, persona, pacing, refusal threshold, evaluation, calibration, and iframe status
 
 **`server/relay.py`** — The local data bridge

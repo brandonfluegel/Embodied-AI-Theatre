@@ -222,7 +222,7 @@ async def handle_client(
     Accept messages from the Tampermonkey userscript and forward to the ESP32.
 
     Single command:   {"channel": 0, "angle": 135}
-    Batched (all 6):  [{"channel": 0, "angle": 135}, {"channel": 3, "angle": 45}, ...]
+    Batched (all 16): [{"channel": 0, "angle": 135}, {"channel": 8, "angle": 45}, ...]
 
     Forwarded to ESP32 as:  S<channel>:<angle>  e.g. S0:135
     """
@@ -272,8 +272,8 @@ async def handle_client(
                 except (KeyError, ValueError, TypeError):
                     continue
 
-                if not (0 <= channel <= 5):
-                    continue   # only channels 0-5 are wired
+                if not (0 <= channel <= 15):
+                    continue   # only channels 0-15 are wired (16-servo antagonistic layout)
 
                 angle = max(0, min(180, angle))   # clamp instead of dropping
 

@@ -115,9 +115,9 @@ The interaction operates as a **closed-loop automated theatre**. When the active
 
 Physical movement is dynamically coupled to active speech synthesis. The moment `utterance.onstart` fires, the userscript launches two simultaneous effects on the **active speaker's channels only**. The silent character holds its last position throughout the opposing turn.
 
-**Head animation:** An oscillation loop sends commands to the active speaker's head channel — **Channel 0** (Darth Vader) while Vader speaks, **Channel 3** (Stormtrooper) while the Trooper speaks. The active channel alternates between **100° and 80°** around the 90° neutral center.
+**Head animation:** An oscillation loop sends commands to the active speaker's head nod pair — the **Vader head nod pair (ch 0/1)** while Vader speaks, the **Trooper head nod pair (ch 8/9)** while the Trooper speaks. Driven through the `sendJoint()` helper, the pair alternates between **100° and 80°** around the 90° neutral center — one channel winds in while its antagonist pays out.
 
-**Arm gesture:** A single dramatic tendon raise is scheduled at approximately 40% through the estimated utterance duration (capped at 2 seconds). The speaker's arm servo — **ch 2** for Darth Vader, **ch 5** for the Stormtrooper — drives to **135°** for 700 ms, then returns to 90°. Duration is estimated from word count and the live speech rate so faster speech produces an earlier gesture cue.
+**Arm gesture:** A single dramatic tendon raise is scheduled at approximately 40% through the estimated utterance duration (capped at 2 seconds). The speaker's shoulder pair — the **Vader shoulder pair (ch 4/5)** or the **Trooper shoulder pair (ch 12/13)** — is driven by `sendJoint()` to **135°** for 700 ms, lifting the arm up-and-out over the acrylic gantry, then returns to 90°. Duration is estimated from word count and the live speech rate so faster speech produces an earlier gesture cue.
 
 The tick interval is now computed from three sources — ENERGY dial, VERBOSITY dial, and the HUD Bob Speed slider:
 
@@ -127,7 +127,7 @@ driver      = (dialDriver + BOB_SPEED_HUD) / 2   // blends dial speed with manua
 interval_ms = 200 − (driver / 100) × 150         // 200 ms (slow) → 50 ms (fast)
 ```
 
-The moment `utterance.onend` fires, `clearInterval` terminates the head loop instantly and the active speaker's head channel snaps back to 90° neutral. The opposing character's channels are not touched. No servo motion persists between spoken turns.
+The moment `utterance.onend` fires, `clearInterval` terminates the head loop instantly and the active speaker's head nod pair snaps back to 90° neutral. The opposing character's joints are not touched. No servo motion persists between spoken turns.
 
 ### Conversation Handoff Flow
 
@@ -139,8 +139,8 @@ The moment `utterance.onend` fires, `clearInterval` terminates the head loop ins
     ↓
 [window.speechSynthesis.speak(utterance) — character-specific voice selected]
     ↓  utterance.onstart  → stopNoiseInterval() — Temperature noise silenced
-    ↓                     → head-bob loop starts on active speaker's channel (ch 0 Vader | ch 3 Trooper)
-    ↓                     → arm gesture scheduled at ~40% through utterance (ch 2 Vader | ch 5 Trooper → 135° for 700 ms)
+    ↓                     → head-bob loop starts on active speaker's head nod pair (ch 0/1 Vader | ch 8/9 Trooper)
+    ↓                     → arm gesture scheduled at ~40% through utterance (shoulder pair ch 4/5 Vader | ch 12/13 Trooper → 135° for 700 ms)
     ↓  utterance.onend   → loop cleared, speaker head → S<ch>:90, entry pushed to sessionLog
     ↓                     → pushToEval() writes live transcript + scoring criteria to /play/eval
     ↓
@@ -162,9 +162,9 @@ The /play/refusal playground lets you define boundary phrases — words or patte
 
 1. The running `speechSynthesis` utterance is immediately cancelled
 2. All servo animation intervals are cleared
-3. A defensive posture command sequence fires over the WebSocket:
-   - Channel 0 drops to 60° — Darth Vader bows his head down ominously
-   - Channel 3 tilts to 120° — the Stormtrooper snaps his head to a defensive stance
+3. A defensive posture command sequence fires over the WebSocket via the `sendJoint()` helper:
+   - The **Vader head nod pair (ch 0/1)** is commanded to 60° — Darth Vader bows his head down ominously
+   - The **Trooper head nod pair (ch 8/9)** is commanded to 120° — the Stormtrooper snaps his head to a defensive stance
 4. Both postures hold until the user resumes the session or a configurable timeout clears them
 
 This gives the live performance a visually dramatic physical reaction to sensitive content, reinforcing the character boundaries in a way the audience can see and feel.
@@ -195,7 +195,7 @@ Four autonomous behaviour systems run in parallel with the core speech loop, rea
 
 **Eval Closed-Loop Feedback** — `runEvalScoring()` calls `monitorEvalOutput()` before triggering generation. A one-shot MutationObserver waits on the `/play/eval` output area; `parseEvalScore()` extracts all `N/10` patterns from the scoring response and averages them. If the average falls below **6.0/10**, `applyEvalFeedback()` reduces `dialValues.ENERGY` and `dialValues.VERBOSITY` by up to 30 points, pushes the new values to the main page and all iframes, sends updated servo positions to both affected channels, and returns both heads to 90° neutral. The event is also logged to relay.py for the terminal record.
 
-**Diff Uncertainty Visualization** — `initDiffMonitor()` sets up a persistent MutationObserver on the `/play/diff` iframe body. After each mutation burst, `checkDiffOutputs()` identifies the two richest output-like text blocks and computes their Jaccard word-overlap similarity. Similarity below **0.35** (< 35% shared vocabulary = wildly divergent outputs) triggers `triggerDiffUncertainty()`: the Stormtrooper’s head (ch 3) pans side-to-side three times at 200 ms intervals, and Vader’s arm (ch 2) raises to 135° and holds. The physical state resolves automatically when similarity recovers or at the next `scheduleHandoff()` boundary.
+**Diff Uncertainty Visualization** — `initDiffMonitor()` sets up a persistent MutationObserver on the `/play/diff` iframe body. After each mutation burst, `checkDiffOutputs()` identifies the two richest output-like text blocks and computes their Jaccard word-overlap similarity. Similarity below **0.35** (< 35% shared vocabulary = wildly divergent outputs) triggers `triggerDiffUncertainty()`: the **Trooper torso twist pair (ch 10/11)** swings side-to-side three times at 200 ms intervals — shaking his whole body — and the **Vader shoulder pair (ch 4/5)** raises to 135° and holds, both driven by `sendJoint()`. The physical state resolves automatically when similarity recovers or at the next `scheduleHandoff()` boundary.
 
 ---
 
@@ -276,7 +276,7 @@ All six shape-models.com playgrounds are loaded and controlled from inside the s
 | `persona` | `/play/persona` | Character backstory, voice, and name definitions |
 | `choreographer` | `/play/choreographer` | Conversation pacing and turn-taking rules — receives HUD Bob Speed (slot 0) and Turn Pause (slot 1) on every slider change |
 | `refusal` | `/play/refusal` | Boundary phrase configuration and safety settings |
-| `diff` | `/play/diff` | Side-by-side prompt comparison — `initDiffMonitor()` watches for divergent outputs (Jaccard similarity < 0.35) and triggers Trooper head-pan (ch 3) + Vader arm-raise and hold (ch 2) |
+| `diff` | `/play/diff` | Side-by-side prompt comparison — `initDiffMonitor()` watches for divergent outputs (Jaccard similarity < 0.35) and triggers Trooper torso-twist shake (ch 10/11) + Vader shoulder raise-and-hold (ch 4/5) |
 | `eval` | `/play/eval` | Automated quality scoring of completed dialogue sessions |
 
 Because every URL shares the exact same origin (`shape-models.com`), the browser applies no CORS restrictions. JavaScript running in the parent `/play/tone` tab can freely read and write into each iframe's `contentDocument` and `contentWindow` as if they were part of the same page.
@@ -502,7 +502,7 @@ RobotProject/
 - [x] Temperature slider integrated — `findTemperatureSlider()` captures it outside the tone-dials scope; drives physical noise engine (random ±8° servo deviations at 500–2000 ms intervals, scaled by temperature value) during inter-turn silence
 - [x] Sentiment-driven persona injection — `detectSentiment()` classifies completed turns; `injectPersonaModifier()` appends intensity tag to the largest `/play/persona` textarea when 2+ aggressive patterns match
 - [x] Eval closed-loop feedback — `monitorEvalOutput()` reads the eval iframe stream; `applyEvalFeedback()` lowers ENERGY and VERBOSITY dials and returns both heads to neutral when avg score < 6.0/10
-- [x] Diff uncertainty visualization — `initDiffMonitor()` watches `/play/diff`; Jaccard similarity < 0.35 triggers Trooper head side-pan (ch 3) and Vader arm raise-and-hold (ch 2) until outputs converge
+- [x] Diff uncertainty visualization — `initDiffMonitor()` watches `/play/diff`; Jaccard similarity < 0.35 triggers Trooper torso-twist side-shake (ch 10/11) and Vader shoulder raise-and-hold (ch 4/5) until outputs converge
 - [x] Firmware serial ACK — `processLine()` echoes `ACK:S<ch>:<applied_angle>` after every `moveServo()` call; `relay.py` `read_serial_acks()` background task logs each echo for live Phase 3 wiring verification
 - [x] Single-channel test — `run_channel_test()` in relay.py sweeps one servo in isolation; HUD **▶ Test CH** button sends `test_channel` message; `channel_test_complete` response confirms
 - [x] Calibration limit recorder — **↓ Set Min** and **↑ Set Max** buttons in HUD CALIBRATION record the current slider angle and display the exact `SOFT_MIN_ANGLE[ch]`/`SOFT_MAX_ANGLE[ch]` firmware edit

@@ -37,7 +37,7 @@
   - Eval closed-loop feedback: session score below 6.0/10 auto-lowers ENERGY and
     VERBOSITY dials and returns both heads to neutral.
   - Diff monitor: Jaccard similarity < 0.35 between /play/diff outputs triggers
-    Trooper head-pan and Vader arm-hold until outputs converge.
+    Trooper torso-twist shake and Vader arm-hold until outputs converge.
   - HUD Calibration panel: per-channel angle slider, ▶ Test CH, ↓ Set Min,
     ↑ Set Max, and ⚙ Sweep All Channels for Phase 3/4 hardware bring-up.
   - Session timer (m:ss) and live animation ticks/s meter in the HUD loop section.
@@ -1018,24 +1018,24 @@
         else if (sim >= 0.35 && diffUncertaintyActive) resolveDiffUncertainty();
     }
 
-    // Stormtrooper head rapid pan (TROOPER_HEAD ch 8/9) + Vader arm raises and
-    // holds via the shoulder pair (VADER_SHOULDER ch 4/5).
+    // Stormtrooper whole-body shake via the torso twist pair (TROOPER_TORSO ch 10/11)
+    // + Vader arm raises and holds via the shoulder pair (VADER_SHOULDER ch 4/5).
     function triggerDiffUncertainty() {
         diffUncertaintyActive = true;
         let panStep = 0;
         const panTimer = setInterval(() => {
-            sendJoint(JOINTS.TROOPER_HEAD, panStep % 2 === 0 ? 60 : 120);
+            sendJoint(JOINTS.TROOPER_TORSO, panStep % 2 === 0 ? 60 : 120);
             if (++panStep >= 6) clearInterval(panTimer);   // 3 full side-to-side swings
         }, 200);
         sendJoint(JOINTS.VADER_SHOULDER, 135);   // Vader arm up and holds
         updateHudStatus('diff', '⚠️ Divergent', '#f59e0b');
-        console.log('[Vader/Trooper] Diff divergence — Trooper panning, Vader arm raised.');
+        console.log('[Vader/Trooper] Diff divergence — Trooper torso shaking, Vader arm raised.');
     }
 
     function resolveDiffUncertainty() {
         diffUncertaintyActive = false;
-        sendJoint(JOINTS.VADER_SHOULDER, 90);          // Vader arm returns
-        sendJoint(JOINTS.TROOPER_HEAD, HEAD_CENTER);   // Trooper head re-centres
+        sendJoint(JOINTS.VADER_SHOULDER, 90);        // Vader arm returns
+        sendJoint(JOINTS.TROOPER_TORSO, 90);         // Trooper torso re-centres
         updateHudStatus('diff', '✓ Converged', '#4ade80');
     }
 
