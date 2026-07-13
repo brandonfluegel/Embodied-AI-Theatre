@@ -481,18 +481,18 @@ RobotProject/
 
 ### Phase 2 — Speech & Loop (browser automation)
 - [x] Web Speech API voice synthesis integrated into userscript
-- [x] Syllable-synchronized head-bob loop (ENERGY + VERBOSITY scaled interval, ch 0)
+- [x] Syllable-synchronized head-bob loop (ENERGY + VERBOSITY scaled interval, ch 0/1)
 - [x] MutationObserver output-stream detection with 850 ms debounce
 - [x] Dial values normalized to 0–100 and stored as live speech/animation parameters
 - [x] Floating Master HUD sidebar with tone dials, model select, persona fields, pacing, refusal, and iframe status
 - [x] Five same-origin hidden iframes loaded in background (`/play/persona`, `/play/diff`, `/play/refusal`, `/play/eval`, `/play/choreographer`)
 - [x] React-compatible native prototype value sync from HUD to all iframes
-- [x] Refusal trigger pattern matching → defensive posture servo commands (ch 0 → 60°, ch 3 → 120°)
+- [x] Refusal trigger pattern matching → defensive posture servo commands (ch 0/1 → 60°, ch 8/9 → 120°)
 - [x] Telemetry logging in `relay.py` → `server/performance_logs.json` (NDJSON, append-only)
 - [x] Automatic conversation handoff — Darth Vader ↔ Stormtrooper loop with variable pause (200–3000 ms, HUD-controlled)
-- [x] Dual-character head animation — ch 0 animates while Vader speaks; ch 3 animates while Trooper speaks; silent character holds still
+- [x] Dual-character head animation — ch 0/1 animates while Vader speaks; ch 8/9 animates while Trooper speaks; silent character holds still
 - [x] Per-speaker voice differentiation — `pickVoice(speaker)` selects deep male voices for Vader, distinct sharp voices for Trooper
-- [x] Arm gesture auto-triggers — tendon servos (ch 2 Vader, ch 5 Trooper) raise to 135° at ~40% through each utterance, return to 90° after 700 ms
+- [x] Arm gesture auto-triggers — tendon pairs (ch 4/5 Vader, ch 12/13 Trooper) raise to 135° at ~40% through each utterance, return to 90° after 700 ms
 - [x] HUD Pacing sliders live — Bob Speed blends with ENERGY+VERBOSITY for animation interval; Turn Pause maps 0–100 → 200–3000 ms
 - [x] HUD Refusal Threshold slider pushes live to /play/refusal iframe boundary range control
 - [x] Choreographer iframe integrated — Bob Speed → slot 0, Turn Pause → slot 1 pushed on every HUD slider change
