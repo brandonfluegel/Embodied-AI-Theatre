@@ -5,8 +5,9 @@ WebSocket relay for the Darth Vader & Imperial Stormtrooper servo pipeline.
 Receives tone-dial positions from shape-models.com/play/tone (via Tampermonkey)
 and forwards them to an ESP32 over USB serial.
 
-Darth Vader:         ch 0 = head bob | ch 1 = torso twist | ch 2 = arm tendon
-Imperial Stormtrooper: ch 3 = head turn | ch 4 = torso lean  | ch 5 = arm tendon
+Antagonistic 16-servo layout (pull-pull pairs):
+  Darth Vader   ch 0-7:  head nod (0/1) | torso twist (2/3) | shoulder (4/5) | elbow (6/7)
+  Stormtrooper  ch 8-15: head nod (8/9) | torso twist (10/11) | shoulder (12/13) | elbow (14/15)
 
 Install once:
     pip install websockets pyserial
@@ -121,11 +122,11 @@ async def run_sweep_test(
     Sweep each servo through a safe range of motion to verify Phase 3 wiring.
     Sequence per channel: 90° → 130° → 90° → 50° → 90° (500 ms between steps).
 
-    Sends {"type": "sweep_complete"} when all six channels have been tested.
+    Sends {"type": "sweep_complete"} when all sixteen channels have been tested.
     Trigger this from the HUD Calibration panel's \"Sweep All\" button.
     """
     print("[sweep] Servo sweep test started.")
-    for ch in range(6):
+    for ch in range(16):
         for angle in [90, 130, 90, 50, 90]:
             line = f"S{ch}:{angle}\n"
             if ser:
@@ -145,10 +146,10 @@ async def run_channel_test(
 ) -> None:
     """
     Sweep a single channel through 90\u00b0 \u2192 130\u00b0 \u2192 90\u00b0 \u2192 50\u00b0 \u2192 90\u00b0 with 500 ms between steps.
-    Isolates one servo during Phase 3 wiring without disturbing the other five.
+    Isolates one servo during Phase 3 wiring without disturbing the other fifteen.
     Sends {\"type\": \"channel_test_complete\", \"channel\": ch} when finished.
     """
-    ch = max(0, min(5, ch))
+    ch = max(0, min(15, ch))
     print(f"[sweep] Single-channel test: CH{ch}")
     for angle in [90, 130, 90, 50, 90]:
         line = f"S{ch}:{angle}\n"

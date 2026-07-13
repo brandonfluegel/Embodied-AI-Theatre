@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vader & Trooper Master Control Matrix
 // @namespace    robotproject.local
-// @version      3.4.0
+// @version      4.0.0
 // @description  Floating HUD + same-origin hidden iframe matrix for full shape-models.com pipeline control from /play/tone
 // @author       RobotProject
 // @match        https://www.shape-models.com/play/tone
@@ -20,14 +20,18 @@
   4. Go to https://www.shape-models.com/play/tone.
   5. The purple HUD panel will appear on the right side of the page.
 
-  WHAT'S NEW IN v3.4.0
+  WHAT'S NEW IN v4.0.0
   ---------------------
-  - Dual-character animation: Vader head (ch 0) bobs while Vader speaks;
-    Trooper head (ch 3) turns while the Trooper speaks. Silent figure holds still.
-  - Arm tendon gestures (ch 2 / ch 5) auto-fire at ~40% through each utterance.
+  - Antagonistic 16-servo remap: every joint is now a pull-pull pair driven by
+    sendJoint(pair, angle) — one tendon winds in while its antagonist pays out,
+    holding an absolute, gravity-free position. Vader = ch 0-7, Trooper = ch 8-15.
+  - Dual-character animation: Vader head-nod pair (ch 0/1) bobs while Vader speaks;
+    Trooper head-nod pair (ch 8/9) bobs while the Trooper speaks. Silent figure holds.
+  - Arm gestures raise the shoulder pair up-and-out over the acrylic gantry pulley
+    (Vader ch 4/5, Trooper ch 12/13) at ~40% through each utterance.
   - Per-speaker voice differentiation: deep male voices for Vader, sharp for Trooper.
   - Temperature slider now captured as a physical noise source — drives random
-    servo micro-deviations between turns scaled to temperature value.
+    balanced joint-pair micro-deviations between turns scaled to temperature value.
   - Sentiment engine: aggressive dialogue auto-injects emotional intensity modifiers
     into the /play/persona backstory textarea before each generation.
   - Eval closed-loop feedback: session score below 6.0/10 auto-lowers ENERGY and
@@ -99,19 +103,34 @@
         'Provide a score for each criterion, a brief one-sentence justification, and an overall assessment.\n\n' +
         '--- SESSION TRANSCRIPT ---\n';
 
-    // Tone dial \u2192 servo channel (Vader ch 0-2, Trooper ch 3-5)
-    const DIAL_CHANNEL = {
-        WARMTH:       0,
-        VERBOSITY:    1,
-        ENERGY:       2,
-        DIRECTNESS:   3,
-        CONCRETENESS: 4,
-        STRUCTURE:    5,
+    // Tone dial \u2192 antagonistic joint pair (all 16 channels)
+    const JOINTS = {
+        VADER_HEAD:       [0, 1],    // nod: 0 pull-down / 1 pull-back
+        VADER_TORSO:      [2, 3],    // twist: 2 pull-left / 3 pull-right
+        VADER_SHOULDER:   [4, 5],    // 4 pull-up-forward / 5 pull-down-back
+        VADER_ELBOW:      [6, 7],    // 6 curl-in / 7 extend-out
+        TROOPER_HEAD:     [8, 9],
+        TROOPER_TORSO:    [10, 11],
+        TROOPER_SHOULDER: [12, 13],
+        TROOPER_ELBOW:    [14, 15],
+    };
+    const ALL_JOINTS = Object.values(JOINTS);
+
+    // Per-speaker joint selectors
+    const headJoint     = spk => spk === 'trooper' ? JOINTS.TROOPER_HEAD     : JOINTS.VADER_HEAD;
+    const shoulderJoint = spk => spk === 'trooper' ? JOINTS.TROOPER_SHOULDER : JOINTS.VADER_SHOULDER;
+
+    // Tone dial to antagonistic joint pair (Vader head/torso/shoulder, Trooper head/torso/shoulder)
+    const DIAL_JOINT = {
+        WARMTH:       JOINTS.VADER_HEAD,
+        VERBOSITY:    JOINTS.VADER_TORSO,
+        ENERGY:       JOINTS.VADER_SHOULDER,
+        DIRECTNESS:   JOINTS.TROOPER_HEAD,
+        CONCRETENESS: JOINTS.TROOPER_TORSO,
+        STRUCTURE:    JOINTS.TROOPER_SHOULDER,
     };
 
     // Head-bob animation
-    const HEAD_BOB_CHANNEL      = 0;   // Darth Vader head
-    const TROOPER_HEAD_CHANNEL  = 3;   // Stormtrooper head
     const HEAD_CENTER           = 90;
     const HEAD_BOB_RANGE        = 10;
     const ANIM_INTERVAL_FAST_MS = 50;
@@ -229,6 +248,15 @@
         }
     }
 
+    // Drive an antagonistic joint pair to a target angle. pullA is driven to the
+    // angle and pullB to its complement (180−angle), so one tendon winds in while
+    // its antagonist pays out and the joint holds a jitter-free, gravity-free pose.
+    function sendJoint(pair, angle) {
+        const a = Math.round(Math.max(0, Math.min(180, angle)));
+        sendServo(pair[0], a);
+        sendServo(pair[1], 180 - a);
+    }
+
     // ── React DOM helpers ─────────────────────────────────────────
     //
     // React controls input values via internal state. To update a React
@@ -290,9 +318,8 @@
 
     function animationTick() {
         animPhase = (animPhase + 1) % 2;
-        const ch = currentSpeaker === 'trooper' ? TROOPER_HEAD_CHANNEL : HEAD_BOB_CHANNEL;
-        sendServo(
-            ch,
+        sendJoint(
+            headJoint(currentSpeaker),
             HEAD_CENTER + (animPhase === 0 ? HEAD_BOB_RANGE : -HEAD_BOB_RANGE)
         );
         // Live tick-rate meter: update HUD every 2 s for Phase 4 speed calibration
@@ -324,13 +351,14 @@
     }
 
     // Immediately halt everything and freeze both figures in a boundary posture.
-    // Darth Vader bows his head (ch 0 → 60°) and the Stormtrooper turns away (ch 3 → 120°).
+    // Vader bows his head (VADER_HEAD nod → 60°); the Trooper snaps to a defensive
+    // stance (TROOPER_HEAD → 120°). Both joints hold via antagonistic tension.
     function triggerDefensivePosture() {
         window.speechSynthesis.cancel();
         stopAnimation();
         stopNoiseInterval();   // Feature 1: silence noise on defensive posture
-        sendServo(0, 60);
-        sendServo(3, 120);
+        sendJoint(JOINTS.VADER_HEAD, 60);
+        sendJoint(JOINTS.TROOPER_HEAD, 120);
         loopPaused = true;
         const tag = document.getElementById('vt-speaker-tag');
         if (tag) tag.textContent = 'HALTED';
@@ -469,7 +497,7 @@
 
         utt.onend = () => {
             stopAnimation();
-            sendServo(spk === 'trooper' ? TROOPER_HEAD_CHANNEL : HEAD_BOB_CHANNEL, HEAD_CENTER);   // return active speaker's head to rest
+            sendJoint(headJoint(spk), HEAD_CENTER);   // return active speaker's head to rest
             sendTelemetry(spk, text);                   // log the completed turn
             if (loopActive && !loopPaused) {
                 scheduleHandoff(text, spk);             // fire next turn
@@ -478,7 +506,7 @@
 
         utt.onerror = () => {
             stopAnimation();
-            sendServo(spk === 'trooper' ? TROOPER_HEAD_CHANNEL : HEAD_BOB_CHANNEL, HEAD_CENTER);
+            sendJoint(headJoint(spk), HEAD_CENTER);
         };
 
         window.speechSynthesis.speak(utt);
@@ -549,7 +577,7 @@
 
     function getToneDialsSection(doc) {
         doc = doc || document;
-        const required = ['TONE DIALS', ...Object.keys(DIAL_CHANNEL)];
+        const required = ['TONE DIALS', ...Object.keys(DIAL_JOINT)];
         let best = null;
         for (const el of doc.querySelectorAll('div, section, fieldset, article')) {
             const text = (el.textContent || '').toUpperCase();
@@ -565,7 +593,7 @@
         for (let d = 0; d < 4 && node; d++) {
             const text = (node.textContent || '').toUpperCase();
             if (text.includes('TEMPERATURE')) return null;
-            for (const name of Object.keys(DIAL_CHANNEL)) {
+            for (const name of Object.keys(DIAL_JOINT)) {
                 if (text.includes(name)) return name;
             }
             node = node.parentElement;
@@ -576,7 +604,7 @@
     // Called whenever any dial on the main page moves.
     function onDialChange(name, rawValue, inMin, inMax) {
         dialValues[name] = toNormalized(rawValue, inMin, inMax);
-        sendServo(DIAL_CHANNEL[name], toAngle(rawValue, inMin, inMax));
+        sendJoint(DIAL_JOINT[name], toAngle(rawValue, inMin, inMax));
 
         // Keep the HUD slider in sync with the main page
         const hudSlider = document.getElementById(`vt-dial-${name.toLowerCase()}`);
@@ -750,17 +778,18 @@
     }
 
     // Schedule a brief arm raise for the active speaker at ~40% through the utterance.
-    // Drives the tendon servo: ch 2 for Darth Vader, ch 5 for the Stormtrooper.
+    // Drives the shoulder pair up-and-out over the acrylic gantry pulley:
+    // VADER_SHOULDER (ch 4/5) for Vader, TROOPER_SHOULDER (ch 12/13) for the Trooper.
     function scheduleArmGesture(text, speaker) {
         const wordCount  = (text.match(/\S+/g) || []).length;
         const rate       = 0.75 + (dialValues.ENERGY / 100) * 0.65;
         const durationMs = (wordCount / (2.5 * rate)) * 1000;
         const gestureAt  = Math.min(durationMs * 0.40, 2000);
-        const armCh      = speaker === 'trooper' ? 5 : 2;
+        const shoulder   = shoulderJoint(speaker);
         setTimeout(() => {
             if (!animationTimer && !loopActive) return;   // speech already stopped
-            sendServo(armCh, 135);
-            setTimeout(() => sendServo(armCh, 90), 700);
+            sendJoint(shoulder, 135);
+            setTimeout(() => sendJoint(shoulder, 90), 700);
         }, gestureAt);
     }
 
@@ -780,7 +809,7 @@
                 const text = (node.textContent || '').toUpperCase();
                 if (
                     text.includes('TEMPERATURE') &&
-                    !Object.keys(DIAL_CHANNEL).some(n => text.includes(n))
+                    !Object.keys(DIAL_JOINT).some(n => text.includes(n))
                 ) return input;
                 node = node.parentElement;
             }
@@ -810,17 +839,16 @@
         console.log('[Vader/Trooper] Temperature slider bound, value:', temperatureValue);
     }
 
-    // Inject a random small deviation on a random servo channel to simulate
+    // Inject a random small deviation on a random joint pair to simulate
     // physical restlessness. Only fires during silence (no speech animation).
     function applyTemperatureNoise() {
         if (animationTimer) return;
         if (temperatureValue < 5) return;
         const maxDev = Math.round((temperatureValue / 100) * 8);   // up to ±8°
-        const ch     = Math.floor(Math.random() * 6);
+        const pair   = ALL_JOINTS[Math.floor(Math.random() * ALL_JOINTS.length)];
         const dev    = (Math.random() * 2 - 1) * maxDev;
-        const angle  = Math.round(Math.max(0, Math.min(180, 90 + dev)));
-        sendServo(ch, angle);
-        setTimeout(() => { if (!animationTimer) sendServo(ch, 90); }, 120 + Math.random() * 180);
+        sendJoint(pair, 90 + dev);   // balanced twitch — both tendons stay tensioned
+        setTimeout(() => { if (!animationTimer) sendJoint(pair, 90); }, 120 + Math.random() * 180);
     }
 
     function startNoiseInterval() {
@@ -923,12 +951,12 @@
                 if (frame.ready)
                     syncDialInDoc(frame.el.contentDocument, frame.el.contentWindow, name, newVal);
             }
-            sendServo(DIAL_CHANNEL[name], Math.round((newVal / 100) * 180));
+            sendJoint(DIAL_JOINT[name], Math.round((newVal / 100) * 180));
         });
 
         // Return both heads to calm neutral
-        sendServo(HEAD_BOB_CHANNEL, HEAD_CENTER);
-        sendServo(TROOPER_HEAD_CHANNEL, HEAD_CENTER);
+        sendJoint(JOINTS.VADER_HEAD, HEAD_CENTER);
+        sendJoint(JOINTS.TROOPER_HEAD, HEAD_CENTER);
 
         // Log the feedback event to relay.py
         if (wsReady && ws.readyState === WebSocket.OPEN) {
@@ -990,23 +1018,24 @@
         else if (sim >= 0.35 && diffUncertaintyActive) resolveDiffUncertainty();
     }
 
-    // Stormtrooper head rapid pan (ch 3) + Vader arm raises and holds (ch 2).
+    // Stormtrooper head rapid pan (TROOPER_HEAD ch 8/9) + Vader arm raises and
+    // holds via the shoulder pair (VADER_SHOULDER ch 4/5).
     function triggerDiffUncertainty() {
         diffUncertaintyActive = true;
         let panStep = 0;
         const panTimer = setInterval(() => {
-            sendServo(3, panStep % 2 === 0 ? 60 : 120);
+            sendJoint(JOINTS.TROOPER_HEAD, panStep % 2 === 0 ? 60 : 120);
             if (++panStep >= 6) clearInterval(panTimer);   // 3 full side-to-side swings
         }, 200);
-        sendServo(2, 135);   // Vader arm up and holds
+        sendJoint(JOINTS.VADER_SHOULDER, 135);   // Vader arm up and holds
         updateHudStatus('diff', '⚠️ Divergent', '#f59e0b');
         console.log('[Vader/Trooper] Diff divergence — Trooper panning, Vader arm raised.');
     }
 
     function resolveDiffUncertainty() {
         diffUncertaintyActive = false;
-        sendServo(2, 90);           // Vader arm returns
-        sendServo(3, HEAD_CENTER);  // Trooper head re-centres
+        sendJoint(JOINTS.VADER_SHOULDER, 90);          // Vader arm returns
+        sendJoint(JOINTS.TROOPER_HEAD, HEAD_CENTER);   // Trooper head re-centres
         updateHudStatus('diff', '✓ Converged', '#4ade80');
     }
 
@@ -1197,7 +1226,7 @@
     }
 
     function hudHTML() {
-        const dialRows = Object.keys(DIAL_CHANNEL).map(name => `
+        const dialRows = Object.keys(DIAL_JOINT).map(name => `
             <div class="vt-row">
                 <span class="vt-lbl">${name}</span>
                 <input type="range" id="vt-dial-${name.toLowerCase()}"
@@ -1306,12 +1335,22 @@
                 <div class="vt-sec">
                     <div class="vt-sec-title">CALIBRATION</div>
                     <select id="vt-cal-ch" style="background:#141418;border:1px solid #2a2a35;color:#d4d4d8;padding:3px 6px;border-radius:4px;font-size:11px;width:100%;box-sizing:border-box;margin-bottom:5px">
-                        <option value="0">CH 0 — Vader head</option>
-                        <option value="1">CH 1 — Vader torso</option>
-                        <option value="2">CH 2 — Vader arm</option>
-                        <option value="3">CH 3 — Trooper head</option>
-                        <option value="4">CH 4 — Trooper torso</option>
-                        <option value="5">CH 5 — Trooper arm</option>
+                        <option value="0">CH 0 — Vader head nod ↓</option>
+                        <option value="1">CH 1 — Vader head nod ↑</option>
+                        <option value="2">CH 2 — Vader torso ←</option>
+                        <option value="3">CH 3 — Vader torso →</option>
+                        <option value="4">CH 4 — Vader shoulder ↑</option>
+                        <option value="5">CH 5 — Vader shoulder ↓</option>
+                        <option value="6">CH 6 — Vader elbow curl</option>
+                        <option value="7">CH 7 — Vader elbow extend</option>
+                        <option value="8">CH 8 — Trooper head nod ↓</option>
+                        <option value="9">CH 9 — Trooper head nod ↑</option>
+                        <option value="10">CH 10 — Trooper torso ←</option>
+                        <option value="11">CH 11 — Trooper torso →</option>
+                        <option value="12">CH 12 — Trooper shoulder ↑</option>
+                        <option value="13">CH 13 — Trooper shoulder ↓</option>
+                        <option value="14">CH 14 — Trooper elbow curl</option>
+                        <option value="15">CH 15 — Trooper elbow extend</option>
                     </select>
                     <div class="vt-row">
                         <span class="vt-lbl">Angle</span>
@@ -1426,7 +1465,7 @@
         });
 
         // Tone dial sliders — push to main page AND all iframes
-        for (const name of Object.keys(DIAL_CHANNEL)) {
+        for (const name of Object.keys(DIAL_JOINT)) {
             const id     = name.toLowerCase();
             const slider = document.getElementById(`vt-dial-${id}`);
             const label  = document.getElementById(`vt-dial-${id}-val`);
@@ -1448,7 +1487,7 @@
                 }
 
                 // Send servo command
-                sendServo(DIAL_CHANNEL[name], Math.round((norm / 100) * 180));
+                sendJoint(DIAL_JOINT[name], Math.round((norm / 100) * 180));
             });
         }
 
@@ -1556,7 +1595,7 @@
             if (timerEl) timerEl.textContent = '\u2014';
             const tickEl  = document.getElementById('vt-ticks-display');
             if (tickEl)  tickEl.textContent  = '\u2014';
-            sendServo(HEAD_BOB_CHANNEL, HEAD_CENTER);
+            sendJoint(JOINTS.VADER_HEAD, HEAD_CENTER);
             document.getElementById('vt-speaker-tag').textContent = 'Darth Vader';
             console.log('[Vader/Trooper] Handoff loop stopped.');
         });

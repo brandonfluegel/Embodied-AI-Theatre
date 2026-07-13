@@ -1,7 +1,7 @@
 # MASTER PLAN
 ## Darth Vader & Imperial Stormtrooper — Autonomous Physical-Digital AI Theatre
 ### Architectural Blueprint & Source of Truth
-### Current Version: v3.4.1 — Auto Initial-State Sync on Load
+### Current Version: v4.0.0 — Phase 3 Antagonistic 16-Servo Hardware Pivot
 
 ---
 
@@ -29,39 +29,64 @@ The two characters engage in real-time, hands-free spoken debates. The text outp
 | Height | ~6 inches (~15 cm) | ~6 inches (~15 cm) |
 | Weight | ~100 g (0.1 kg) | ~110 g |
 | Frame type | Highly articulated plastic body with standard joint hinges | Highly articulated plastic body with standard joint hinges |
-| Tendon routing | Anchored to plastic joint hinges, routed down through stage base | Anchored to plastic joint hinges, routed down through stage base |
+| Tendon routing | Antagonistic pull-pull pairs in PTFE Bowden tubes; arm lines redirected up the acrylic gantry | Antagonistic pull-pull pairs in PTFE Bowden tubes; arm lines redirected up the acrylic gantry |
 
-**Key mechanical implication:** Both Black Series figures feature built-in mechanical pivot pins at the neck, shoulders, and torso. Tendon lines must be tied directly to these plastic joint hinges rather than threaded through a hollow shell. Lines are then routed down from each hinge, through the display stage base, and anchored to the servo motor arms hidden beneath the deck.
+**Key mechanical implication:** Both Black Series figures feature built-in mechanical pivot pins at the neck, shoulders, and torso. Each pivot is now driven by an **antagonistic pair** of tendons tied directly to the plastic joint hinge — one line pulls the joint one way, its partner pulls it back — so no gesture depends on gravity to reset. Every tendon runs inside a low-friction PTFE (Teflon) Bowden tube glued to the back of the figure; arm lines are redirected up the Transparent Acrylic Gantry mounted behind the stage to pull the shoulders up and out, while the remaining lines route down through the display stage base to the 16 servos hidden beneath the deck. See Section 3 for the full antagonistic strategy and channel map.
 
 ---
 
-## 3. Mechanical Movement Strategy — 6-Servo Design
+## 3. Mechanical Movement Strategy — 16-Servo Antagonistic Design
 
-To achieve lifelike body expression without adding excessive weight inside the toy frames, physical movement is split across six independent MG90S micro servos mounted beneath the stage deck. All servos are driven by a single PCA9685 PWM board.
+Physical movement is driven by a full **16-servo antagonistic (pull-pull) system** — eight channels per character — mounted beneath the stage deck and driven by a single PCA9685 board using all 16 of its channels. This replaces the earlier 6-servo single-tendon "pull and let gravity drop" approach.
 
-### Channel Assignment
+The previous design pulled each limb with a single tendon and relied on gravity (or a return spring) to reset it. Gravity return is slow, imprecise, and jittery: the limb sags to wherever the figure's own weight settles and light plastic joints bounce. The antagonistic design eliminates this entirely. Every axis of motion is controlled by **two opposing tendons** — one servo winds line to pull the joint one way while its partner pays out line, and the roles reverse to drive it back. Because tension is always held on both sides, each joint holds an absolute, jitter-free 3D position with no dependence on gravity.
 
-| Channel | Character | Joint | Gesture |
+### Antagonistic Tendon Routing
+
+Each degree of freedom is a matched servo pair working in opposition:
+
+- One servo winds line to pull the joint in one direction (e.g. head nod down)
+- Its antagonist winds the opposing line to pull it back (e.g. head lifts back up)
+- Neutral is a balance point where both tendons hold equal tension
+- The controller drives the pair in complementary directions, so there is always active tension on both sides and zero backlash
+
+To eliminate the friction losses that would otherwise fight the antagonistic tension, every tendon now runs inside a **PTFE (Teflon) Bowden tube — 2 mm OD / 1 mm ID**. The tubes are glued flat to the backs of the plastic figures with thick CA glue so each line slides through a low-friction sheath from the joint anchor all the way down to the servo horn, rather than dragging across plastic edges.
+
+### The Transparent Acrylic Gantry
+
+Pulling the arms *upward and outward* is impossible from below the stage without a redirection point. A **Transparent Acrylic Gantry** provides one, mounted invisibly behind the figures:
+
+- A 1/8" (3 mm) clear cast-acrylic board cut into a "T" shape stands behind the two figures
+- Because it is optically clear, it disappears against the backdrop under stage lighting
+- The PTFE Bowden tubes route up the gantry and over its top edge, which acts as a **high-angle pulley**
+- Servos hidden beneath the stage can now pull a figure's arm up and out along a high tendon angle, producing lifelike shoulder raises and reaching gestures that a straight bottom pull could never achieve
+
+### Channel Assignment — 16-Channel Max-Out
+
+The PCA9685's full 16 channels are now used: **Darth Vader occupies channels 0–7, the Imperial Stormtrooper occupies channels 8–15.** Each character has four antagonistic joint pairs (8 channels) covering head nod, torso twist, shoulder, and elbow.
+
+| Channel | Character | Joint | Antagonistic role |
 |---|---|---|---|
-| 0 | Darth Vader | Head | Up/down move — creates syllable speech illusion |
-| 1 | Darth Vader | Torso | Left/right twist — full torso rotation |
-| 2 | Darth Vader | Arm | Tendon pull — dramatic gesture for emphasis |
-| 3 | Imperial Stormtrooper | Head | Side-to-side turn — attentive reaction and listening |
-| 4 | Imperial Stormtrooper | Torso | Forward/back lean — engagement and body language |
-| 5 | Imperial Stormtrooper | Arm | Tendon pull — blaster hand raise or pointing motion |
+| 0 | Darth Vader | Head nod | Pull down |
+| 1 | Darth Vader | Head nod | Pull back |
+| 2 | Darth Vader | Torso twist | Pull left |
+| 3 | Darth Vader | Torso twist | Pull right |
+| 4 | Darth Vader | Shoulder | Pull up-forward |
+| 5 | Darth Vader | Shoulder | Pull down-back |
+| 6 | Darth Vader | Elbow | Curl in |
+| 7 | Darth Vader | Elbow | Extend out |
+| 8 | Imperial Stormtrooper | Head nod | Pull down |
+| 9 | Imperial Stormtrooper | Head nod | Pull back |
+| 10 | Imperial Stormtrooper | Torso twist | Pull left |
+| 11 | Imperial Stormtrooper | Torso twist | Pull right |
+| 12 | Imperial Stormtrooper | Shoulder | Pull up-forward |
+| 13 | Imperial Stormtrooper | Shoulder | Pull down-back |
+| 14 | Imperial Stormtrooper | Elbow | Curl in |
+| 15 | Imperial Stormtrooper | Elbow | Extend out |
 
-### Tendon Mechanics
+Each pair is driven complementarily: to nod Vader's head down, ch 0 winds in while ch 1 pays out; to lift it back, the roles reverse. The same pattern applies to all four joints on both characters, giving each figure absolute positional control across head, torso, shoulder, and elbow.
 
-Servo channels 2 and 5 use a hidden tendon system rather than a rigid linkage. Because the Black Series figures are heavier than smaller toy models (100 g and 110 g respectively), the MG90S servos will operate closer to their maximum torque rating when pulling limbs against gravity. Keep line routing as direct as possible to minimise friction losses.
-
-- Clear nylon fishing line is tied to the plastic joint hinge at the target limb
-- The line is routed down the outside of the figure, pressed flat against the back
-- It passes through a small drilled hole in the underside of the display stage base
-- The other end is anchored to the servo motor arm hidden beneath the stage deck
-- When the servo rotates, it winds the line and pulls the limb upward
-- A return spring or gravity resets the limb when tension is released
-
-This approach keeps all electronics completely out of sight beneath the stage while using the figures' own articulation hinges as the mechanical interface point.
+> **Software integration note:** As of v4.0.0 the browser animation layer (`vader_trooper.user.js`) drives the antagonistic pairs directly. A `sendJoint(pair, angle)` helper sends each joint's target angle to `pullA` and its complement (180−angle) to `pullB`. The head-bob loop, arm-raise gesture (shoulder pair lifted up-and-out over the gantry), refusal postures, temperature-noise engine, diff-uncertainty response, and dial→servo forwarding all address joints by name (`JOINTS.VADER_HEAD`, `JOINTS.TROOPER_SHOULDER`, …). Per-servo tension limits are still tuned during Phase 4 calibration.
 
 ---
 
@@ -193,14 +218,16 @@ The six tone dials do **not** directly command individual servo positions in rea
 
 The stored 0–100 values are then read continuously by the speech engine and the animation loop:
 
-| Dial | Servo channel | Normalized value drives |
+| Dial | Antagonistic joint pair | Normalized value drives |
 |---|---|---|
-| WARMTH | ch 0 Darth Vader head | Voice pitch (0.85 → 1.15) — dial sets resting position; head animation loop takes command priority during active speech |
-| VERBOSITY | ch 1 Darth Vader torso | Head-bob animation density (contributes 50 % to tick interval) |
-| ENERGY | ch 2 Darth Vader arm | Speech rate (0.75 → 1.40) + head-bob speed (contributes 50 % to tick interval) |
-| DIRECTNESS | ch 3 Stormtrooper head | Language sharpness (affects language model prompt) |
-| CONCRETENESS | ch 4 Stormtrooper torso | Specificity of AI output (affects language model prompt) |
-| STRUCTURE | ch 5 Stormtrooper arm | Prose vs. formatted output (affects language model prompt) |
+| WARMTH | Vader head nod (ch 0/1) | Voice pitch (0.85 → 1.15) — dial sets resting position; head animation loop takes command priority during active speech |
+| VERBOSITY | Vader torso twist (ch 2/3) | Head-bob animation density (contributes 50 % to tick interval) |
+| ENERGY | Vader shoulder (ch 4/5) | Speech rate (0.75 → 1.40) + head-bob speed (contributes 50 % to tick interval) |
+| DIRECTNESS | Trooper head nod (ch 8/9) | Language sharpness (affects language model prompt) |
+| CONCRETENESS | Trooper torso twist (ch 10/11) | Specificity of AI output (affects language model prompt) |
+| STRUCTURE | Trooper shoulder (ch 12/13) | Prose vs. formatted output (affects language model prompt) |
+
+Each dial forwards its position to a joint through `sendJoint()`, which drives the pair antagonistically (`pullA` → angle, `pullB` → 180−angle). The elbow pairs (ch 6/7, ch 14/15) are reserved for future gestures and are not currently dial-bound.
 
 ### Animation Speed — Energy, Verbosity, and Bob Speed
 
@@ -320,10 +347,26 @@ Model selection and persona field changes follow the same pattern, targeting `<s
 | Component | Part | Role |
 |---|---|---|
 | Microcontroller | ESP32 Type-C development board | Receives serial commands, drives PCA9685 via I2C |
-| PWM driver | PCA9685 16-channel board | Converts I2C commands to 50 Hz PWM signals for all 6 servos |
-| Servos (×6) | MG90S micro servo | Physical actuation of joints and tendons |
+| PWM driver | PCA9685 16-channel board | Converts I2C commands to 50 Hz PWM signals for all 16 channels |
+| Servos (×16) | MG90S micro servo, metal gear | Antagonistic actuation — 8 channels per character |
+| Servo power supply | 5 V / 15 A (75 W) switching adapter | Dedicated high-current rail for 16 servos under antagonistic tension |
+| Power connector | Female barrel-to-screw-terminal block | Breaks the adapter barrel jack out to the PCA9685 V+ rail |
+| Tendon line | 20 lb black braided PE fishing line | Zero-stretch, zero-memory tendon — holds antagonistic tension precisely |
+| Tendon sheath | PTFE tubing, 1 mm ID × 2 mm OD (3 m) | Low-friction Bowden routing on the backs of the figures |
+| Gantry | 1/8" (3 mm) clear cast acrylic sheet, 12" × 12" | Invisible "T" board — high-angle pulley for arm lifts |
+| Adhesive | Thick CA glue (cyanoacrylate) | Bonds PTFE tubes to the figures and the gantry |
+| Cable management | Mini zip ties | Bundles the 16 servo leads and tendon runs |
 | Host computer | Lenovo ThinkPad | Runs relay.py, browser userscripts, and HTML dashboard |
-| Servo power supply | 5 V / 3 A wall adapter | Dedicated power rail for all servo current draw |
+
+### Bill of Materials (Phase 3 Antagonistic Upgrade)
+
+- **ESP32 + PCA9685** — unchanged controller stack, now using all 16 channels
+- **16× MG90S micro servos** (metal gear)
+- **5 V / 15 A (75 W) switching adapter** with a female barrel-to-screw-terminal block
+- **20 lb black braided PE fishing line** (zero stretch, zero memory)
+- **3 m of 1 mm ID × 2 mm OD PTFE tubing**
+- **1/8" (3 mm) clear cast acrylic sheet, 12" × 12"**
+- **Thick CA glue** (cyanoacrylate) + **mini zip ties** for cable management
 
 ### Wiring Diagram
 
@@ -332,21 +375,36 @@ ThinkPad (USB)
     │
     └── ESP32 (GPIO 21 SDA, GPIO 22 SCL)
             │
-            └── PCA9685
+            └── PCA9685 (all 16 channels)
                     │
-                    ├── CH 0 ── Darth Vader head servo
-                    ├── CH 1 ── Darth Vader torso twist servo
-                    ├── CH 2 ── Darth Vader arm tendon servo
-                    ├── CH 3 ── Stormtrooper head servo
-                    ├── CH 4 ── Stormtrooper torso lean servo
-                    └── CH 5 ── Stormtrooper arm tendon servo
+                    ├── CH 0  ── Vader head nod     — pull down
+                    ├── CH 1  ── Vader head nod     — pull back
+                    ├── CH 2  ── Vader torso twist  — pull left
+                    ├── CH 3  ── Vader torso twist  — pull right
+                    ├── CH 4  ── Vader shoulder     — pull up-forward
+                    ├── CH 5  ── Vader shoulder     — pull down-back
+                    ├── CH 6  ── Vader elbow        — curl in
+                    ├── CH 7  ── Vader elbow        — extend out
+                    ├── CH 8  ── Trooper head nod   — pull down
+                    ├── CH 9  ── Trooper head nod   — pull back
+                    ├── CH 10 ── Trooper torso twist — pull left
+                    ├── CH 11 ── Trooper torso twist — pull right
+                    ├── CH 12 ── Trooper shoulder   — pull up-forward
+                    ├── CH 13 ── Trooper shoulder   — pull down-back
+                    ├── CH 14 ── Trooper elbow      — curl in
+                    └── CH 15 ── Trooper elbow      — extend out
 
-5V/3A Wall Adapter ── PCA9685 V+ power rail (isolated from ThinkPad logic)
+5V/15A Adapter ── barrel-to-screw-terminal block ── PCA9685 V+ rail (isolated from ThinkPad logic)
 ```
 
-### Power Isolation
+### Power Isolation & Current Budget
 
-The 5 V / 3 A wall adapter feeds **only the PCA9685 V+ terminal rail**. The six MG90S servos draw their operating current entirely from this external supply. The ThinkPad USB port provides logic power to the ESP32 only — no servo current passes through the USB bus. All grounds (ESP32 GND, PCA9685 GND, and wall adapter GND) are connected at a single shared ground point.
+Sixteen MG90S servos held under constant antagonistic tension draw far more current than the previous six gravity-return servos, whose idle channels drew almost nothing. Because both tendons in every pair are actively tensioned at all times, all 16 servos can be under load simultaneously. The supply is therefore upgraded from **5 V / 3 A (15 W)** to a **5 V / 15 A (75 W)** switching adapter.
+
+- The adapter's barrel jack terminates in a **female barrel-to-screw-terminal block**, which breaks out to the PCA9685 **V+ rail** with a solid screwed connection rated for the higher current.
+- The 15 A supply feeds **only** the PCA9685 V+ rail; the ThinkPad USB port provides logic power to the ESP32 only — no servo current passes through the USB bus.
+- All grounds (ESP32 GND, PCA9685 GND, and adapter GND) are connected at a single shared ground point.
+- Mini zip ties bundle the 16 servo leads to keep the high-current runs tidy and strain-relieved.
 
 ### Communication Stack
 
@@ -355,7 +413,7 @@ The 5 V / 3 A wall adapter feeds **only the PCA9685 V+ terminal rail**. The six 
 | Browser → Python | WebSocket | `ws://localhost:8765` | Browser userscript → relay.py |
 | Python → ESP32 | USB Serial | 115200 baud | relay.py → ESP32 |
 | ESP32 → PCA9685 | I2C | 400 kHz (fast mode) | ESP32 → PCA9685 |
-| PCA9685 → Servos | PWM | 50 Hz | PCA9685 → MG90S ×6 |
+| PCA9685 → Servos | PWM | 50 Hz | PCA9685 → MG90S ×16 |
 
 ### Serial Command Format
 
@@ -363,13 +421,13 @@ The 5 V / 3 A wall adapter feeds **only the PCA9685 V+ terminal rail**. The six 
 S<channel>:<angle>\n
 
 Examples:
-  S0:90    →  Darth Vader head to center
-  S0:110   →  Darth Vader head nod forward
-  S3:60    →  Stormtrooper head turn
-  S5:135   →  Stormtrooper arm raise
+  S0:120   →  Vader head nod — pull-down tendon winds in
+  S1:60    →  Vader head nod — pull-back tendon pays out
+  S8:120   →  Trooper head nod — pull-down tendon winds in
+  S12:135  →  Trooper shoulder — pull up-forward (arm lifts via gantry)
 ```
 
-Angles arrive from the browser as 0–180° and are clamped first by `processLine()`, then by each channel’s `SOFT_MIN_ANGLE` / `SOFT_MAX_ANGLE` inside `moveServo()`. Edit the soft-limit arrays in the firmware and reflash during Phase 4 to match each figure’s physical stop points. All other channels are silently ignored.
+Angles arrive from the browser as 0–180° and are clamped first by `processLine()`, then by each channel’s `SOFT_MIN_ANGLE` / `SOFT_MAX_ANGLE` inside `moveServo()`. Channels 0–15 are valid; edit the 16-entry soft-limit arrays in the firmware and reflash during Phase 4 to match each figure’s physical stop points and prevent antagonistic over-tension. All other channels are silently ignored.
 
 ---
 
@@ -407,7 +465,8 @@ RobotProject/
 
 ## 10. Development Checklist
 
-> **Status as of 2026-07-11 — Software pipeline v3.4.1. Digital stack complete with four active dynamic behaviour layers.**
+> **Status as of 2026-07-13 — Software pipeline v3.4.1; hardware plan pivoted to the v4.0.0 Antagonistic 16-Servo design.**
+> Digital stack complete with four active dynamic behaviour layers.
 > Both figures animate independently per speaker. Temperature drives physical noise between turns. Dialogue
 > sentiment automatically modulates the /play/persona backstory. The eval iframe feeds a closed-loop score
 > monitor that adjusts live dial values. The /play/diff iframe triggers physical uncertainty responses.
@@ -460,14 +519,17 @@ RobotProject/
 > sync on page load — HUD defaults propagate to the main page and all iframes immediately without
 > a manual Sync click. Awaiting hardware.
 
-### Phase 3 — Physical Build (hardware)
-- [ ] Stage base constructed with servo mounting positions
-- [ ] Tendon lines anchored to Black Series joint hinges and routed through stage base
-- [ ] All 6 servos wired to PCA9685 and tested independently
-- [ ] Power supply isolated and verified safe
+### Phase 3 — Physical Build (hardware — Antagonistic 16-Servo Upgrade)
+- [ ] Stage base constructed with mounting positions for all 16 servos
+- [ ] Transparent acrylic "T" gantry cut from 1/8" clear cast acrylic and mounted invisibly behind the figures
+- [ ] PTFE Bowden tubes (1 mm ID × 2 mm OD) glued to the backs of the figures with thick CA glue; arm tubes routed over the gantry as high-angle pulleys
+- [ ] Antagonistic tendon pairs (20 lb braided PE line) anchored to each joint hinge and to opposing servo horns
+- [ ] All 16 MG90S servos wired to the PCA9685 and tested independently (relay sweep covers ch 0–15)
+- [ ] 5 V / 15 A supply wired through the barrel-to-screw-terminal block, isolated and verified safe under full antagonistic load
 
 ### Phase 4 — Integration & Calibration
-- [ ] Per-servo angle limits tuned — move each figure joint by hand to find physical stops; update `SOFT_MIN_ANGLE` / `SOFT_MAX_ANGLE` in firmware; use HUD Calibration slider to confirm servo obeys limits
+- [x] Browser animation layer remapped from the legacy 6-channel scheme onto the 16-channel antagonistic pairs — `sendJoint(pair, angle)` drives every joint (`pullA` → angle, `pullB` → 180−angle); head bob, arm raise, refusal postures, noise engine, diff response, and dial forwarding all address joints by name (Vader 0–7, Trooper 8–15); HUD Calibration dropdown lists all 16 channels
+- [ ] Per-servo angle limits tuned — move each figure joint by hand to find physical stops; update `SOFT_MIN_ANGLE` / `SOFT_MAX_ANGLE` for all 16 channels in firmware to prevent antagonistic over-tension; use HUD Calibration slider to confirm servo obeys limits
 - [ ] Tone dial → servo speed mapping calibrated — run the autonomous loop and adjust the ENERGY/VERBOSITY animation interval formula until head-bob speed matches speech cadence
 - [ ] Full autonomous loop tested for 10+ minutes without intervention
 
@@ -478,4 +540,4 @@ RobotProject/
 
 ---
 
-*Last updated: 2026-07-11 — v3.4.1 patch: `syncAll()` auto-triggers on page load once all 5 iframes reach Ready, eliminating HUD-vs-page startup desync; four-step cascade pushes Model, Tone Dials, Pacing, and Refusal Threshold to the main `/play/tone` DOM and all iframes via native prototype setter + bubbling events; ↺ Sync all iframes button expanded to cover main page model selector and pacing/refusal controls. All software todos exhausted — project ready for Phase 3 hardware build.*
+*Last updated: 2026-07-13 — v4.0.0 hardware pivot: Phase 3 mechanical strategy upgraded from a 6-servo single-tendon gravity-return system to a full 16-servo antagonistic (pull-pull) design (Vader ch 0–7, Trooper ch 8–15). Tendons now run in PTFE Bowden tubes routed up a transparent acrylic gantry that acts as a high-angle pulley for arm lifts. Hardware list updated: 16× MG90S, 5 V/15 A supply with barrel-to-screw-terminal block, 20 lb braided PE line, PTFE tubing, clear cast acrylic, CA glue. Sections 2, 3, and 8 rewritten; firmware and relay updated to 16 channels. Browser userscript (v4.0.0) remapped onto the antagonistic pairs via a `sendJoint()` helper — head bob, arm raise, refusal postures, noise engine, diff response, and dial forwarding all address joints by name; HUD Calibration lists all 16 channels.*

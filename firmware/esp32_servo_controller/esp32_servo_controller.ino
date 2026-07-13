@@ -1,14 +1,19 @@
 /*
   esp32_servo_controller.ino
   --------------------------
-  Receives servo commands over USB Serial and drives 6 MG90S servos
-  through an Adafruit PCA9685 board.
+  Receives servo commands over USB Serial and drives 16 MG90S servos
+  through an Adafruit PCA9685 board in a full antagonistic (pull-pull) layout.
 
-  Darth Vader:           ch 0 = head bob  | ch 1 = torso twist | ch 2 = arm tendon
-  Imperial Stormtrooper: ch 3 = head turn | ch 4 = torso lean  | ch 5 = arm tendon
+  Darth Vader   (ch 0-7):  head nod (0 down / 1 back), torso twist (2 left / 3 right),
+                           shoulder (4 up-fwd / 5 down-back), elbow (6 curl / 7 extend)
+  Stormtrooper  (ch 8-15): head nod (8 down / 9 back), torso twist (10 left / 11 right),
+                           shoulder (12 up-fwd / 13 down-back), elbow (14 curl / 15 extend)
+
+  Each joint is a matched servo pair: one channel winds line in while its
+  antagonist pays line out, giving jitter-free positioning with no gravity return.
 
   Command format (one per line):  S<channel>:<angle>
-  Examples:  S0:90   S3:45   S5:135
+  Examples:  S0:120   S8:120   S12:135
 
   Required libraries (install via Arduino Library Manager):
       • Adafruit PWM Servo Driver Library
@@ -40,16 +45,21 @@ static const uint16_t SERVO_MAX   = 600;   // pulse count for 180°
 static const uint8_t  PWM_FREQ_HZ = 50;    // standard servo frequency
 
 // ── Serial input buffer ───────────────────────────────────────────
-static const uint8_t  NUM_SERVOS             = 6;
-static const int      HOME_ANGLE[NUM_SERVOS] = {90, 90, 90, 90, 90, 90};
+static const uint8_t  NUM_SERVOS             = 16;
+static const int      HOME_ANGLE[NUM_SERVOS] = {90, 90, 90, 90, 90, 90, 90, 90,
+                                                90, 90, 90, 90, 90, 90, 90, 90};
 
 // Per-servo soft angle limits — tune these during Phase 4 calibration to match
-// the physical stop points of each figure and prevent tendon over-pull.
+// the physical stop points of each figure and prevent antagonistic over-pull.
+// Every channel is now a tendon winder in a pull-pull pair; keep the window
+// conservative until each joint's travel is measured by hand.
 // Edit SOFT_MIN / SOFT_MAX, then use the HUD Calibration panel to verify.
-//   ch0 = Vader head   ch1 = Vader torso    ch2 = Vader arm tendon
-//   ch3 = Trpr head    ch4 = Trpr torso     ch5 = Trpr arm tendon
-static const int SOFT_MIN_ANGLE[NUM_SERVOS] = { 70,  45,  60,  60,  60,  60};
-static const int SOFT_MAX_ANGLE[NUM_SERVOS] = {110, 135, 150, 120, 120, 150};
+//   Vader   ch0-7:  headNod(0/1)  torsoTwist(2/3)  shoulder(4/5)  elbow(6/7)
+//   Trooper ch8-15: headNod(8/9)  torsoTwist(10/11) shoulder(12/13) elbow(14/15)
+static const int SOFT_MIN_ANGLE[NUM_SERVOS] = {45, 45, 45, 45, 45, 45, 45, 45,
+                                               45, 45, 45, 45, 45, 45, 45, 45};
+static const int SOFT_MAX_ANGLE[NUM_SERVOS] = {135, 135, 135, 135, 135, 135, 135, 135,
+                                               135, 135, 135, 135, 135, 135, 135, 135};
 
 static const uint8_t  BUF_SIZE    = 16;
 static char           inputBuf[BUF_SIZE];

@@ -17,7 +17,7 @@ shape-models.com is an AI behavior design platform built around a set of interac
 
 All five background playgrounds run as hidden iframes inside the main tone tab. A floating HUD injected into the page provides unified control over all of them without switching tabs.
 
-**The hardware side:** two Hasbro Star Wars Black Series figures on a custom stage, six MG90S servos mounted beneath the deck, tendon lines routed up through the base to the joint hinges of each figure. An ESP32 running over USB serial receives positional commands from a local Python server and drives a PCA9685 PWM board to move all six channels.
+**The hardware side:** two Hasbro Star Wars Black Series figures on a custom stage, sixteen MG90S metal-gear servos mounted beneath the deck in a full antagonistic (pull-pull) layout — eight channels per figure. Tendons run in low-friction PTFE Bowden tubes glued to the backs of the figures; arm lines are redirected up a transparent acrylic gantry behind the stage that acts as a high-angle pulley. An ESP32 running over USB serial receives positional commands from a local Python server and drives a PCA9685 PWM board across all 16 channels, powered by a dedicated 5 V / 15 A supply.
 
 ---
 
@@ -28,7 +28,7 @@ All five background playgrounds run as hidden iframes inside the main tone tab. 
 This is a Tampermonkey userscript that lives inside Google Chrome. It drives the full embodied AI theatre loop:
 
 - Waits for the AI to finish writing a response, then reads it out loud — Darth Vader with a deep male voice, the Stormtrooper with a sharper, distinct voice
-- While each character speaks, animates that character’s head servo (Vader ch 0 bobs, Trooper ch 3 turns) and fires a dramatic arm-tendon raise at ~40% through the utterance
+- While each character speaks, animates that character’s head-nod pair (Vader ch 0/1, Trooper ch 8/9) and fires a dramatic arm raise on the shoulder pair (Vader ch 4/5, Trooper ch 12/13) at ~40% through the utterance
 - Reads the six tone dials and the Temperature slider: dials shape voice rate and motor intervals; Temperature drives a physical noise engine that twitches servos at random intervals during silence
 - Detects aggressive dialogue sentiment and injects emotional intensity modifiers into the /play/persona backstory in real time
 - Monitors the /play/eval iframe’s scoring output and automatically lowers ENERGY and VERBOSITY dials if session quality drops below threshold
@@ -60,16 +60,30 @@ This is the code that lives on the ESP32 microcontroller chip itself. It:
 
 ## Motor Channel Map
 
-| Channel | Toy | Body Part | Notes |
-|---|---|---|---|
-| 0 | Darth Vader | Head move | Animates automatically while Darth Vader is speaking |
-| 1 | Darth Vader | Torso twist | Rotates the full torso left and right |
-| 2 | Darth Vader | Arm gesture | Tendon-pulled — raises arm for dramatic emphasis |
-| 3 | Stormtrooper | Head turn | Side-to-side reaction and listening |
-| 4 | Stormtrooper | Torso lean | Forward and back engagement lean |
-| 5 | Stormtrooper | Arm gesture | Tendon-pulled — blaster hand raise or pointing motion |
+The figures use a full 16-channel antagonistic (pull-pull) layout — each joint is a matched servo pair, one channel pulls while its partner pulls back. Darth Vader is on channels 0–7, the Stormtrooper on channels 8–15.
 
-Channels 0 and 3 animate automatically during speech — Vader's head bobs (ch 0) while he speaks, the Trooper's head turns (ch 3) while it speaks. Channels 2 and 5 also fire automatically mid-utterance as arm-tendon raises, then return to rest. Channels 1 and 4 (torso servos) follow the tone dial values.
+| Channel | Toy | Joint | Antagonistic role |
+|---|---|---|---|
+| 0 | Darth Vader | Head nod | Pull down |
+| 1 | Darth Vader | Head nod | Pull back |
+| 2 | Darth Vader | Torso twist | Pull left |
+| 3 | Darth Vader | Torso twist | Pull right |
+| 4 | Darth Vader | Shoulder | Pull up-forward |
+| 5 | Darth Vader | Shoulder | Pull down-back |
+| 6 | Darth Vader | Elbow | Curl in |
+| 7 | Darth Vader | Elbow | Extend out |
+| 8 | Stormtrooper | Head nod | Pull down |
+| 9 | Stormtrooper | Head nod | Pull back |
+| 10 | Stormtrooper | Torso twist | Pull left |
+| 11 | Stormtrooper | Torso twist | Pull right |
+| 12 | Stormtrooper | Shoulder | Pull up-forward |
+| 13 | Stormtrooper | Shoulder | Pull down-back |
+| 14 | Stormtrooper | Elbow | Curl in |
+| 15 | Stormtrooper | Elbow | Extend out |
+
+Each pair moves complementarily — winding one tendon in while its partner pays out — so every joint holds an absolute, jitter-free position without relying on gravity.
+
+> **Software note:** The browser userscript (v4.0.0) drives these pairs through a `sendJoint(pair, angle)` helper — each joint command sends the target angle to one channel and its complement (180−angle) to the antagonist, so the mock-mode output below shows both channels of a pair moving together.
 
 ---
 
@@ -117,18 +131,21 @@ You should see:
 ```
 [Vader/Trooper] Stream complete → The Emperor’s will shall be done…
 [MOCK STREAM] Received from Browser: {"channel":0,"angle":100} -> Outbound: S0:100
+[MOCK STREAM] Received from Browser: {"channel":1,"angle":80}  -> Outbound: S1:80
 [MOCK STREAM] Received from Browser: {"channel":0,"angle":80}  -> Outbound: S0:80
-[MOCK STREAM] Received from Browser: {"channel":2,"angle":135} -> Outbound: S2:135
-[MOCK STREAM] Received from Browser: {"channel":0,"angle":100} -> Outbound: S0:100
+[MOCK STREAM] Received from Browser: {"channel":1,"angle":100} -> Outbound: S1:100
+[MOCK STREAM] Received from Browser: {"channel":4,"angle":135} -> Outbound: S4:135
+[MOCK STREAM] Received from Browser: {"channel":5,"angle":45}  -> Outbound: S5:45
 [telemetry] Turn 1 logged — speaker: vader — chars: 42
 [Vader/Trooper] Stream complete → As you command, Lord Vader…
-[MOCK STREAM] Received from Browser: {"channel":3,"angle":60}  -> Outbound: S3:60
-[MOCK STREAM] Received from Browser: {"channel":3,"angle":120} -> Outbound: S3:120
-[MOCK STREAM] Received from Browser: {"channel":5,"angle":135} -> Outbound: S5:135
+[MOCK STREAM] Received from Browser: {"channel":8,"angle":100}  -> Outbound: S8:100
+[MOCK STREAM] Received from Browser: {"channel":9,"angle":80}   -> Outbound: S9:80
+[MOCK STREAM] Received from Browser: {"channel":12,"angle":135} -> Outbound: S12:135
+[MOCK STREAM] Received from Browser: {"channel":13,"angle":45}  -> Outbound: S13:45
 [telemetry] Turn 2 logged — speaker: trooper — chars: 38
 ```
 
-Vader’s head bobs (ch 0) while he speaks and the Trooper’s head turns (ch 3) while it speaks. Both arm servos raise (ch 2, ch 5) mid-utterance. Telemetry is written to `server/performance_logs.json` after each turn.
+Each head bob and arm raise drives an antagonistic pair — one channel winds in while its partner pays out (e.g. Vader’s head nod moves ch 0 and ch 1 in opposite directions). Vader animates on ch 0–7, the Trooper on ch 8–15. Telemetry is written to `server/performance_logs.json` after each turn.
 
 ---
 
