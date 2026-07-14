@@ -19,17 +19,19 @@
   3. Run:  python server/relay.py  in your VS Code terminal.
   4. Go to https://www.shape-models.com/play/tone.
   5. Select a cloud-based model in the MODEL drop-down BEFORE starting the loop.
-     "Groq Llama 3.3 70B" is strongly recommended (250+ tokens/s, near-zero
-     dead-air gaps). Do NOT use the "Free (in browser)" model — local WebGPU
+     "Claude Haiku 4.5" is strongly recommended (ultra-low latency token streaming,
+     near-zero dead-air gaps, cost-effective for infinite loops, superior theatrical
+     persona retention). Do NOT use the "Free (in browser)" model — local WebGPU
      inference runs on the browser's main thread and will lag the 50 ms servo
      animation intervals, causing stuttering in the physical syllable sync.
   6. The purple HUD panel will appear on the right side of the page.
 
   WHAT'S NEW IN v5.0.0
   ---------------------
-  - Groq Cloud API mandate: "Free (in browser)" / WebGPU model prohibited. Groq
-    Llama 3.3 70B (250+ tokens/s) is the required model. A guardrail at Start Loop
-    detects a local model and prompts the operator to switch before proceeding.
+  - Claude Haiku 4.5 API mandate: "Free (in browser)" / WebGPU model prohibited. Claude
+    Haiku 4.5 is the required model (ultra-low latency, cost-effective for infinite loops,
+    superior theatrical persona retention). A guardrail at Start Loop detects a local
+    model and prompts the operator to switch before proceeding.
   - Spline kinematic calibration: sendJoint() uses per-joint CALIBRATION_CURVES
     piecewise linear interpolation to derive pullA and pullB independently,
     correcting for non-circular joint geometry. Linear 180−angle mapping removed.
@@ -1568,7 +1570,7 @@
                     'WARNING: A local \'Free (in browser)\' model is selected.\n\n' +
                     'Local WebGPU inference blocks the browser\'s main thread and will\n' +
                     'cause severe latency and stuttering in the physical servo animations.\n\n' +
-                    'It is highly recommended to switch to Groq (Llama 3.3 70B) before starting.\n\n' +
+                    'It is highly recommended to switch to Claude Haiku 4.5 before starting.\n\n' +
                     'Continue anyway?'
                 );
                 if (!_proceed) return;

@@ -1,7 +1,7 @@
 # MASTER PLAN
 ## Darth Vader & Imperial Stormtrooper — Autonomous Physical-Digital AI Theatre
 ### Architectural Blueprint & Source of Truth
-### Current Version: v5.0.0 — Groq Cloud API, Spline Kinematics & Thermal Protection
+### Current Version: v5.0.0 — Claude Haiku 4.5 API, Spline Kinematics & Thermal Protection
 
 ---
 
@@ -98,14 +98,14 @@ Each pair is driven complementarily: to nod Vader's head down, ch 0 winds in whi
 
 The shape-models.com playground offers a "Free (in browser)" option that runs a language model entirely inside the browser via WebGPU. While convenient for casual use, this model is fundamentally incompatible with the physical theatre system for one critical reason: **WebGPU model inference executes on the browser's main thread**. JavaScript is single-threaded — when the local model is generating tokens it saturates main-thread execution time, starving the servo animation `setInterval` callbacks. The result is that the 50 ms head-bob and gesture animation intervals slip to hundreds of milliseconds, completely destroying the syllable-synchronised physical movement that is the core of this project.
 
-**Required model: Groq (Llama 3.3 70B)**
+**Required model: Claude Haiku 4.5**
 
-Before starting the autonomous loop the operator must manually select **"Groq (Llama 3.3 70B)"** from the model drop-down on the shape-models.com `/play/tone` page. Groq is chosen for its inference speed of **250+ tokens per second**, which keeps "dead air" handoff gaps between the two characters near zero and ensures the MutationObserver's 850 ms stream-end debounce fires within the expected window.
+Before starting the autonomous loop the operator must manually select **"Claude Haiku 4.5"** from the model drop-down on the shape-models.com `/play/tone` page. Claude Haiku 4.5 is the mandated model because it offers the best balance of **ultra-low latency token streaming**, **cost-effectiveness for infinite loops**, and **superior theatrical persona retention** — its instruction-following and character-consistency at low latency outperform all other available options for sustained, unattended AI theatre. Its cloud-side inference keeps the browser's main thread entirely free, ensuring the 50 ms servo animation intervals fire without slip and the MutationObserver's 850 ms stream-end debounce fires within the expected window.
 
 | Model type | Main-thread impact | Servo animation | Dead-air gap |
 |---|---|---|---|
 | Free (in browser) / WebGPU | **HIGH — blocks JS event loop** | Stutters, drops frames | Unpredictable |
-| Groq Llama 3.3 70B (cloud) | None — network I/O only | Smooth 50 ms intervals | Near zero |
+| Claude Haiku 4.5 (cloud) | None — network I/O only | Smooth 50 ms intervals | Near zero |
 
 The `vader_trooper.user.js` guardrail will prompt the operator with a warning dialog if it detects that a local model appears to be selected when the **Start Loop** button is clicked. The operator may override the warning, but degraded physical performance is expected.
 
@@ -482,13 +482,13 @@ RobotProject/
 
 ## 10. Development Checklist
 
-> **Status as of 2026-07-14 — v5.0.0. All software complete. Groq Llama 3.3 70B is the mandated model; piecewise spline kinematics active in `sendJoint()`; PWM thermal timeout implemented in firmware; CA glue method fully deprecated. Awaiting physical hardware build (Phase 3).**
+> **Status as of 2026-07-14 — v5.0.0. All software complete. Claude Haiku 4.5 is the mandated model; piecewise spline kinematics active in `sendJoint()`; PWM thermal timeout implemented in firmware; CA glue method fully deprecated. Awaiting physical hardware build (Phase 3).**
 > Digital stack complete with four active dynamic behaviour layers.
 > Both figures animate independently per speaker. Temperature drives physical noise between turns. Dialogue
 > sentiment automatically modulates the /play/persona backstory. The eval iframe feeds a closed-loop score
 > monitor that adjusts live dial values. The /play/diff iframe triggers physical uncertainty responses.
 > Firmware has per-servo soft limits and 1500 ms PWM stall timeout; relay.py has a sweep-test; HUD has a full Calibration panel.
-> All 5 iframes auto-sync HUD defaults on load; Groq Cloud API mandate enforced at Start Loop.
+> All 5 iframes auto-sync HUD defaults on load; Claude Haiku 4.5 API mandate enforced at Start Loop.
 
 ### Phase 1 — Digital Pipeline (software only)
 - [x] `relay.py` — WebSocket server receives dial data, forwards to ESP32 via serial
@@ -531,7 +531,7 @@ RobotProject/
 > per-servo soft limits, echoes `ACK:S<ch>:<angle>` after each command, and cuts PWM after 1500 ms
 > of static hold. `relay.py` has a full sweep, single-channel test, and live serial-ACK reader. The
 > HUD CALIBRATION panel has per-channel slider, ▶ Test CH, ↓ Set Min, ↑ Set Max, and Sweep All.
-> The loop section shows a session timer, live animation ticks/s, and a health watchdog. Groq Cloud
+> The loop section shows a session timer, live animation ticks/s, and a health watchdog. Claude Haiku 4.5
 > API mandate enforced at Start Loop. Awaiting hardware.
 
 ### Phase 3 — Physical Build (hardware — Antagonistic 16-Servo Upgrade)
@@ -555,4 +555,4 @@ RobotProject/
 
 ---
 
-*Last updated: 2026-07-14 — v5.0.0: Groq Cloud API mandate (Groq Llama 3.3 70B required; "Free (in browser)" / WebGPU model prohibited and guarded at loop start); piecewise spline kinematic calibration in `sendJoint()` via `CALIBRATION_CURVES` (linear 180−angle mapping removed); PTFE tube anchoring migrated from CA glue to heated-needle melt channels + 0.5 mm brass wire / micro zip-ties; ESP32 PWM thermal timeout (1500 ms stall cut, `servoReleased` flag) and constraint logic cleanup (`applied` angle passed directly to `moveServo()`, duplicate `constrain()` removed).*
+*Last updated: 2026-07-14 — v5.0.0: Claude Haiku 4.5 API mandate (Claude Haiku 4.5 required; "Free (in browser)" / WebGPU model prohibited and guarded at loop start); piecewise spline kinematic calibration in `sendJoint()` via `CALIBRATION_CURVES` (linear 180−angle mapping removed); PTFE tube anchoring migrated from CA glue to heated-needle melt channels + 0.5 mm brass wire / micro zip-ties; ESP32 PWM thermal timeout (1500 ms stall cut, `servoReleased` flag) and constraint logic cleanup (`applied` angle passed directly to `moveServo()`, duplicate `constrain()` removed).*
