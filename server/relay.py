@@ -49,6 +49,9 @@ LOGS_PATH: str = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "performance_logs.json"
 )
 
+# Bound the command backlog so a flooded browser cannot grow memory without limit.
+SERIAL_QUEUE_MAXSIZE: int = 256
+
 # ── Serial helpers ────────────────────────────────────────────────────────────
 
 def find_serial_port() -> str:
@@ -129,11 +132,8 @@ async def run_sweep_test(
     for ch in range(16):
         for angle in [90, 130, 90, 50, 90]:
             line = f"S{ch}:{angle}\n"
-            if ser:
-                ser.write(line.encode("ascii"))
-                print(f"[sweep]  ch{ch} \u2192 {angle}\u00b0")
-            else:
-                print(f"[MOCK SWEEP] S{ch}:{angle}")
+            await write_serial_line(ser, line)
+            print(f"[sweep]  ch{ch} \u2192 {angle}\u00b0")
             await asyncio.sleep(0.5)
     print("[sweep] Sweep test complete.")
     await websocket.send(json.dumps({"type": "sweep_complete"}))
@@ -153,11 +153,8 @@ async def run_channel_test(
     print(f"[sweep] Single-channel test: CH{ch}")
     for angle in [90, 130, 90, 50, 90]:
         line = f"S{ch}:{angle}\n"
-        if ser:
-            ser.write(line.encode("ascii"))
-            print(f"[sweep]  ch{ch} \u2192 {angle}\u00b0")
-        else:
-            print(f"[MOCK TEST] S{ch}:{angle}")
+        await write_serial_line(ser, line)
+        print(f"[sweep]  ch{ch} \u2192 {angle}\u00b0")
         await asyncio.sleep(0.5)
     await websocket.send(json.dumps({"type": "channel_test_complete", "channel": ch}))
 
@@ -214,9 +211,31 @@ async def read_serial_acks(ser: serial.Serial) -> None:
         await asyncio.sleep(0.02)
 
 
+async def write_serial_line(ser: serial.Serial | None, line: str) -> None:
+    if ser:
+        await asyncio.to_thread(ser.write, line.encode("ascii"))
+        print(f"[serial] {line.strip()}")
+    else:
+        print(f"[MOCK STREAM] {line.strip()}")
+
+
+async def serial_writer(ser: serial.Serial | None, queue: asyncio.Queue[str]) -> None:
+    while True:
+        line = await queue.get()
+        try:
+            if ser:
+                await asyncio.to_thread(ser.write, line.encode("ascii"))
+                print(f"[serial] {line.strip()}")
+            else:
+                print(f"[MOCK STREAM] Queued from Browser: {line.strip()}")
+        finally:
+            queue.task_done()
+
+
 async def handle_client(
     websocket: websockets.ServerConnection,
     ser: serial.Serial,
+    serial_queue: asyncio.Queue[str],
 ) -> None:
     """
     Accept messages from the Tampermonkey userscript and forward to the ESP32.
@@ -260,7 +279,11 @@ async def handle_client(
 
             # Single-channel test: isolate one servo for targeted Phase 3 verification.
             if isinstance(payload, dict) and payload.get("type") == "test_channel":
-                await run_channel_test(websocket, ser, int(payload.get("channel", 0)))
+                try:
+                    channel = int(payload.get("channel", 0))
+                except (TypeError, ValueError):
+                    continue
+                await run_channel_test(websocket, ser, channel)
                 continue
 
             commands = payload if isinstance(payload, list) else [payload]
@@ -278,11 +301,10 @@ async def handle_client(
                 angle = max(0, min(180, angle))   # clamp instead of dropping
 
                 line = f"S{channel}:{angle}\n"
-                if ser:
-                    ser.write(line.encode("ascii"))
-                    print(f"[serial] {line.strip()}")
-                else:
-                    print(f"[MOCK STREAM] Received from Browser: {raw} -> Outbound: {line.strip()}")
+                try:
+                    serial_queue.put_nowait(line)
+                except asyncio.QueueFull:
+                    print(f"[serial] Dropped command because the outbound queue is full: {line.strip()}")
 
     except websockets.exceptions.ConnectionClosedOK:
         pass
@@ -302,14 +324,17 @@ async def main() -> None:
         port_name = SERIAL_PORT or find_serial_port()
         ser = open_serial(port_name)
 
+    serial_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=SERIAL_QUEUE_MAXSIZE)
+
     async def handler(ws: websockets.ServerConnection) -> None:
-        await handle_client(ws, ser)
+        await handle_client(ws, ser, serial_queue)
 
     print(f"[ws] Listening on ws://{WS_HOST}:{WS_PORT}  (Ctrl+C to stop)")
 
     async with websockets.serve(handler, WS_HOST, WS_PORT, compression=None):
         if ser:
             asyncio.create_task(read_serial_acks(ser))   # log ESP32 ACK lines
+        asyncio.create_task(serial_writer(ser, serial_queue))
         await asyncio.Future()
 
 

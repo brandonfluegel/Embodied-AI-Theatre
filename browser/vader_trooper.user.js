@@ -191,7 +191,12 @@
     let streamDebounce  = null;
     let lastSpokenText  = '';
     let outputObserver  = null;
+    let evalObserver    = null;
+    let diffObserver    = null;
     let outputContainer = null;
+    let pendingTimers   = new Set();
+    let evalDebounce    = null;
+    let diffDebounce    = null;
 
     // Normalized dial values (0-100), updated whenever any dial moves
     const dialValues = {
@@ -469,7 +474,7 @@
         // Feature 1: fire temperature noise during inter-turn silence
         startNoiseInterval();
 
-        setTimeout(() => {
+        registerTimeout(() => {
             if (!loopActive || loopPaused) return;
 
             // Find the main page's user message input
@@ -530,12 +535,14 @@
         utt.pitch = 0.85 + (dialValues.WARMTH  / 100) * 0.30;
 
         utt.onstart = () => {
+            if (!loopActive || loopPaused) return;
             stopNoiseInterval();   // Feature 1: silence inter-turn noise during speech
             startAnimation();
             scheduleArmGesture(text, spk);
         };
 
         utt.onend = () => {
+            if (!loopActive || loopPaused) return;
             stopAnimation();
             sendJoint(headJoint(spk), HEAD_CENTER);   // return active speaker's head to rest
             sendTelemetry(spk, text);                   // log the completed turn
@@ -566,6 +573,7 @@
     }
 
     function onStreamChunk(container) {
+        if (!loopActive || loopPaused) return;
         const text = extractOutputText(container);
         if (!text || text.length < 10) return;
 
@@ -811,10 +819,10 @@
         const durationMs = (wordCount / (2.5 * rate)) * 1000;
         const gestureAt  = Math.min(durationMs * 0.40, 2000);
         const shoulder   = shoulderJoint(speaker);
-        setTimeout(() => {
+        registerTimeout(() => {
             if (!animationTimer && !loopActive) return;   // speech already stopped
             sendJoint(shoulder, 135);
-            setTimeout(() => sendJoint(shoulder, 90), 700);
+            registerTimeout(() => sendJoint(shoulder, 90), 700);
         }, gestureAt);
     }
 
@@ -887,6 +895,55 @@
         if (noiseTimer) { clearInterval(noiseTimer); noiseTimer = null; }
     }
 
+    function registerTimeout(callback, delay) {
+        const id = setTimeout(() => {
+            pendingTimers.delete(id);
+            callback();
+        }, delay);
+        pendingTimers.add(id);
+        return id;
+    }
+
+    function clearPendingTimers() {
+        for (const id of pendingTimers) clearTimeout(id);
+        pendingTimers.clear();
+    }
+
+    function cleanupObservers() {
+        if (outputObserver) {
+            outputObserver.disconnect();
+            outputObserver = null;
+        }
+        if (evalObserver) {
+            evalObserver.disconnect();
+            evalObserver = null;
+        }
+        if (diffObserver) {
+            diffObserver.disconnect();
+            diffObserver = null;
+        }
+    }
+
+    function stopAllActivity() {
+        clearPendingTimers();
+        if (streamDebounce) {
+            clearTimeout(streamDebounce);
+            streamDebounce = null;
+        }
+        if (evalDebounce) {
+            clearTimeout(evalDebounce);
+            evalDebounce = null;
+        }
+        if (diffDebounce) {
+            clearTimeout(diffDebounce);
+            diffDebounce = null;
+        }
+        cleanupObservers();
+        window.speechSynthesis.cancel();
+        stopAnimation();
+        stopNoiseInterval();
+    }
+
     // ── Feature 2: Sentiment-Driven Persona Injection ────────────
 
     function detectSentiment(text) {
@@ -941,18 +998,19 @@
         const outputEl = findOutputSection(doc);
         if (!outputEl) return;
 
-        let evalDebounce = null;
-        const observer   = new MutationObserver(() => {
+        if (evalObserver) evalObserver.disconnect();
+        evalObserver   = new MutationObserver(() => {
             if (evalDebounce) clearTimeout(evalDebounce);
             evalDebounce = setTimeout(() => {
                 const avgScore = parseEvalScore((outputEl.textContent || '').trim());
                 if (avgScore !== null) {
                     applyEvalFeedback(avgScore);
-                    observer.disconnect();   // one-shot; re-attached on next runEvalScoring()
+                    evalObserver.disconnect();   // one-shot; re-attached on next runEvalScoring()
+                    evalObserver = null;
                 }
             }, 1500);
         });
-        observer.observe(outputEl, { childList: true, subtree: true, characterData: true });
+        evalObserver.observe(outputEl, { childList: true, subtree: true, characterData: true });
     }
 
     // If avg session score < EVAL_PASS_THRESHOLD: reduce ENERGY and VERBOSITY,
@@ -1013,11 +1071,12 @@
         if (!frame || !frame.ready) { setTimeout(initDiffMonitor, 3000); return; }
         const doc = frame.el.contentDocument;
 
-        let diffDebounce = null;
-        new MutationObserver(() => {
+        if (diffObserver) diffObserver.disconnect();
+        diffObserver = new MutationObserver(() => {
             if (diffDebounce) clearTimeout(diffDebounce);
             diffDebounce = setTimeout(() => checkDiffOutputs(doc), 1200);
-        }).observe(doc.body, { childList: true, subtree: true, characterData: true });
+        });
+        diffObserver.observe(doc.body, { childList: true, subtree: true, characterData: true });
 
         console.log('[Vader/Trooper] Diff divergence monitor active.');
     }
@@ -1652,9 +1711,7 @@
             loopPaused = false;
             document.getElementById('vt-loop-start').style.display = 'block';
             document.getElementById('vt-loop-stop').style.display  = 'none';
-            window.speechSynthesis.cancel();
-            stopAnimation();
-            stopNoiseInterval();
+            stopAllActivity();
             if (diffUncertaintyActive) resolveDiffUncertainty();
             if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
             sessionStartTime = 0;
@@ -1735,6 +1792,9 @@
             ws.send(JSON.stringify({ type: 'sweep_test' }));
             if (statusEl) statusEl.textContent = 'Sweeping\u2026';
         });
+
+        window.addEventListener('pagehide', stopAllActivity);
+        window.addEventListener('beforeunload', stopAllActivity);
     }
 
     // Update a status label in the HUD by its key name.
