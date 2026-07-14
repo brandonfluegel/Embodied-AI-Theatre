@@ -18,7 +18,12 @@
   2. Dashboard → Create a new script → paste this entire file → Ctrl+S.
   3. Run:  python server/relay.py  in your VS Code terminal.
   4. Go to https://www.shape-models.com/play/tone.
-  5. The purple HUD panel will appear on the right side of the page.
+  5. Select a cloud-based model in the MODEL drop-down BEFORE starting the loop.
+     "Groq Llama 3.3 70B" is strongly recommended (250+ tokens/s, near-zero
+     dead-air gaps). Do NOT use the "Free (in browser)" model — local WebGPU
+     inference runs on the browser's main thread and will lag the 50 ms servo
+     animation intervals, causing stuttering in the physical syllable sync.
+  6. The purple HUD panel will appear on the right side of the page.
 
   WHAT'S NEW IN v4.0.0
   ---------------------
@@ -1552,6 +1557,31 @@
 
         // "Start Loop" — activate the automated Darth Vader ↔ Stormtrooper handoff loop
         document.getElementById('vt-loop-start').addEventListener('click', () => {
+            // Cloud-model guardrail: warn if a local 'Free (in browser)' / WebGPU model
+            // appears to be active. Local inference blocks the browser's main thread and
+            // starves the 50 ms servo animation setInterval, causing physical stutter.
+            // We check <select> values, [role="combobox"] text, and selected [role="option"]
+            // elements — the shapes most React model pickers render on this page.
+            const _modelNodes = [
+                ...document.querySelectorAll('select'),
+                ...document.querySelectorAll('[role="combobox"]'),
+                ...document.querySelectorAll('[role="option"][aria-selected="true"]'),
+                ...document.querySelectorAll('[aria-label*="model" i]'),
+                ...document.querySelectorAll('[data-testid*="model" i]'),
+            ];
+            const _modelText = _modelNodes
+                .map(el => (el.value || el.textContent || el.getAttribute('aria-label') || '').trim())
+                .join(' ');
+            if (/free\s*\(in\s*browser\)|webgpu/i.test(_modelText)) {
+                const _proceed = window.confirm(
+                    'WARNING: A local \'Free (in browser)\' model is selected.\n\n' +
+                    'Local WebGPU inference blocks the browser\'s main thread and will\n' +
+                    'cause severe latency and stuttering in the physical servo animations.\n\n' +
+                    'It is highly recommended to switch to Groq (Llama 3.3 70B) before starting.\n\n' +
+                    'Continue anyway?'
+                );
+                if (!_proceed) return;
+            }
             loopActive     = true;
             loopPaused     = false;
             currentSpeaker = 'vader';

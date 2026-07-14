@@ -92,6 +92,25 @@ Each pair is driven complementarily: to nod Vader's head down, ch 0 winds in whi
 
 ## 4. Embodied Speech & Interactive Conversation Loop
 
+### The Cloud API Mandate
+
+**The local "Free (in browser)" WebGPU model MUST NOT be used for this project.**
+
+The shape-models.com playground offers a "Free (in browser)" option that runs a language model entirely inside the browser via WebGPU. While convenient for casual use, this model is fundamentally incompatible with the physical theatre system for one critical reason: **WebGPU model inference executes on the browser's main thread**. JavaScript is single-threaded — when the local model is generating tokens it saturates main-thread execution time, starving the servo animation `setInterval` callbacks. The result is that the 50 ms head-bob and gesture animation intervals slip to hundreds of milliseconds, completely destroying the syllable-synchronised physical movement that is the core of this project.
+
+**Required model: Groq (Llama 3.3 70B)**
+
+Before starting the autonomous loop the operator must manually select **"Groq (Llama 3.3 70B)"** from the model drop-down on the shape-models.com `/play/tone` page. Groq is chosen for its inference speed of **250+ tokens per second**, which keeps "dead air" handoff gaps between the two characters near zero and ensures the MutationObserver's 850 ms stream-end debounce fires within the expected window.
+
+| Model type | Main-thread impact | Servo animation | Dead-air gap |
+|---|---|---|---|
+| Free (in browser) / WebGPU | **HIGH — blocks JS event loop** | Stutters, drops frames | Unpredictable |
+| Groq Llama 3.3 70B (cloud) | None — network I/O only | Smooth 50 ms intervals | Near zero |
+
+The `vader_trooper.user.js` guardrail will prompt the operator with a warning dialog if it detects that a local model appears to be selected when the **Start Loop** button is clicked. The operator may override the warning, but degraded physical performance is expected.
+
+---
+
 ### Stage 1 — Real-Time Text Generation Hook
 
 The userscript does not track mouse clicks or raw slider positions to trigger speech. Instead, it deploys a `MutationObserver` targeted directly at the generation output box at the bottom of the shape-models.com playground. The observer fires the exact millisecond new tokens begin streaming onto the screen after the **Run with this tone** button is pressed.
