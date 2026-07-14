@@ -1038,7 +1038,18 @@
             .slice(0, 2);
 
         if (panels.length < 2) return;
-        const sim = textSimilarity(panels[0].textContent, panels[1].textContent);
+
+        const textA = panels[0].textContent.trim();
+        const textB = panels[1].textContent.trim();
+
+        // Guard: skip evaluation when either panel is empty, too short, or still
+        // loading — avoids false-positive divergence signals during startup and
+        // network generation handoffs that would flood the WebSocket with spurious
+        // Trooper torso twist / Vader shoulder servo commands.
+        if (textA.length < 20 || textB.length < 20 ||
+            textA.includes('Loading') || textB.includes('Loading')) return;
+
+        const sim = textSimilarity(textA, textB);
         if (sim < 0.35 && !diffUncertaintyActive) triggerDiffUncertainty();
         else if (sim >= 0.35 && diffUncertaintyActive) resolveDiffUncertainty();
     }
@@ -1181,8 +1192,10 @@
         for (const [key, url] of Object.entries(IFRAME_PAGES)) {
             const iframe = document.createElement('iframe');
             iframe.src = url;
-            // Hidden and zero-size — completely invisible, no layout impact
-            iframe.style.cssText = 'display:none;position:fixed;width:0;height:0;border:0;pointer-events:none;';
+            // Off-screen 1×1 micro-viewport — keeps the JS event loop and
+            // MutationObservers unthrottled in Chromium (display:none/zero-size causes
+            // aggressive background-tab throttling in modern Chrome engines).
+            iframe.style.cssText = 'position:fixed; width:1px; height:1px; opacity:0.01; pointer-events:none; left:-10px; bottom:-10px; border:0;';
             iframe.setAttribute('aria-hidden', 'true');
             iframes[key] = { el: iframe, ready: false };
 
