@@ -253,14 +253,14 @@ The HUD is a fixed-position panel, 272 px wide, anchored to the right edge of th
 
 | HUD Section | Function |
 |---|---|
-| Model Selection | Syncs the chosen AI model to all five background iframes simultaneously |
+| Model Selection | Two-tier cascading dropdowns: Provider (`#vt-provider`) selects between "Free (in browser)", "Anthropic", and "OpenAI"; Model (`#vt-model`) lists the provider's available models. Both dropdowns sync to the main page and all five background iframes simultaneously. |
 | Tone Dials | Six sliders mirroring the main page dials; changes push to main page AND all iframes |
 | Persona | Darth Vader and Stormtrooper name fields; the incoming speaker's name is auto-pushed to /play/persona's NAME field on every conversation handoff so the model always generates from the correct character identity |
 | Pacing | Bob Speed blends live with ENERGY+VERBOSITY to set animation tick rate; Turn Pause maps 0–100 → 200–3000 ms inter-turn gap; both push values to /play/choreographer on every change |
 | Refusal Threshold | Pushes live to /play/refusal's first boundary range control via React-compatible setter |
 | Evaluation | “📊 Score Session” pushes `sessionLog` + five-dimension scoring criteria to `/play/eval` and clicks generate; “📋 Load Replay” fetches `performance_logs.json` from relay.py and populates `/play/eval` for scoring of past sessions |
 | Iframe Status | Live 🟢/🟡/🔴 indicator for each of the five background iframes |
-| Sync All | Calls `syncAll()` — pushes Model, Tone Dials, Pacing, and Refusal Threshold to the main `/play/tone` DOM **and** every ready iframe simultaneously; also fires automatically on page load once all 5 iframes reach Ready, eliminating HUD-vs-page startup desync without a manual click |
+| Sync All | Calls `syncAll()` — pushes Provider + Model (two-tier), Tone Dials, Pacing, and Refusal Threshold to the main `/play/tone` DOM **and** every ready iframe simultaneously; also fires automatically on page load once all 5 iframes reach Ready, eliminating HUD-vs-page startup desync without a manual click |
 | Generate | Triggers the main page's Run button from the HUD without touching the keyboard |
 
 ---
@@ -295,11 +295,11 @@ Every iframe has a live status row in the Master HUD:
 
 ### Auto Initial-State Sync
 
-A persistent startup desync previously existed between the HUD's default values (e.g. the Model dropdown showing "Claude Sonnet 4") and the native page state (e.g. the site's own selector still showing "Llama 3.2 1B"). The values only aligned when the operator manually clicked ↺ Sync all iframes.
+A persistent startup desync previously existed between the HUD's default values and the native page state. The values only aligned when the operator manually clicked ↺ Sync all iframes.
 
 This is resolved by a readiness gate inside `injectIframes()`. After each iframe's 2500 ms hydration timer fires and marks the frame Ready, the script checks `Object.values(iframes).every(f => f.ready)`. When the last of the 5 iframes crosses that threshold, `syncAll()` runs once automatically:
 
-1. **Model** — scans `<select>` / `[role="combobox"]` on the main `/play/tone` page with the native prototype setter + bubbling `input`/`change` events, then calls `syncModelToIframes` for all iframes.
+1. **Provider + Model** — calls `syncProviderAndModel(document, window, selectedProvider, selectedModel)` to set the Provider dropdown on the main `/play/tone` page first; after a 150 ms React re-render delay the dependent Model dropdown is updated. Then `syncModelToIframes(selectedProvider, selectedModel)` mirrors both selections across all five iframes. The `findModelDropdowns()` helper identifies the two native dropdowns by scanning ancestor labels for "PROVIDER" / "MODEL" text, falling back to option-content keywords ("Free", "Anthropic", "Llama", "Qwen", etc.) and finally by DOM order.
 2. **Tone dials** — `pushDialToMainPage` writes each of the 6 dials to the native sliders on the main page; `syncAllDials` mirrors them to all iframes.
 3. **Pacing** — `syncChoreographerSlider(0, hudBobSpeed)` and `syncChoreographerSlider(1, hudTurnPause)` push the HUD defaults to the choreographer iframe.
 4. **Refusal threshold** — `syncRefusalThreshold` reads the HUD slider value and pushes it to the refusal iframe.
