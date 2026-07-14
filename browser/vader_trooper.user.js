@@ -1025,6 +1025,14 @@
     // Compare the two richest output-like text blocks in the diff page.
     // Similarity < 0.35 (< 35 % shared vocabulary) = wildly divergent outputs.
     function checkDiffOutputs(doc) {
+        // Guard: do not evaluate diff while the loop is stopped or in defensive posture.
+        // Without this, a halted loop still receives MutationObserver callbacks and can
+        // produce false-positive divergence signals that fire servo commands unexpectedly.
+        if (!loopActive || loopPaused) {
+            if (diffUncertaintyActive) resolveDiffUncertainty();
+            return;
+        }
+
         const panels = [...doc.querySelectorAll('div, section, article')]
             .filter(el => {
                 const len = (el.textContent || '').trim().length;
@@ -1578,7 +1586,35 @@
             const _modelText = _modelNodes
                 .map(el => (el.value || el.textContent || el.getAttribute('aria-label') || '').trim())
                 .join(' ');
-            if (/free\s*\(in\s*browser\)|webgpu/i.test(_modelText)) {
+            // Proactive model enforcement: if the active model is NOT Claude Haiku 4.5,
+            // attempt to select it programmatically via React-compatible helpers before
+            // the loop starts. This prevents WebGPU fallback crashes ("Cannot find model
+            // record in appConfig") that corrupt the diff panel and trigger false-positive
+            // divergence shaking.
+            const _isHaiku = /claude\s*haiku\s*4\.5/i.test(_modelText);
+            if (!_isHaiku) {
+                // 1. Try <select> elements first (simplest case)
+                const _select = document.querySelector('select');
+                if (_select) {
+                    const _opt = [..._select.options].find(o => /claude\s*haiku\s*4\.5/i.test(o.text));
+                    if (_opt) {
+                        setReactValue(_select, _opt.value, window);
+                    }
+                }
+                // 2. Try React combobox / listbox pattern (shape-models.com model picker)
+                const _combobox = document.querySelector('[role="combobox"]');
+                if (_combobox) {
+                    fireClick(_combobox, window);                       // open dropdown
+                    // Wait one tick for the option list to render, then click the option
+                    setTimeout(() => {
+                        const _option = [...document.querySelectorAll('[role="option"]')]
+                            .find(o => /claude\s*haiku\s*4\.5/i.test(o.textContent));
+                        if (_option) fireClick(_option, window);
+                    }, 150);
+                }
+            }
+
+            if (/free\s*\(in\s*browser\)|webgpu/i.test(_modelText) && !_isHaiku) {
                 const _proceed = window.confirm(
                     'WARNING: A local \'Free (in browser)\' model is selected.\n\n' +
                     'Local WebGPU inference blocks the browser\'s main thread and will\n' +
