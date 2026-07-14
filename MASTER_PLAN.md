@@ -1,7 +1,7 @@
 # MASTER PLAN
 ## Darth Vader & Imperial Stormtrooper — Autonomous Physical-Digital AI Theatre
 ### Architectural Blueprint & Source of Truth
-### Current Version: v4.0.0 — Phase 3 Antagonistic 16-Servo Hardware Pivot
+### Current Version: v5.0.0 — Groq Cloud API, Spline Kinematics & Thermal Protection
 
 ---
 
@@ -31,15 +31,15 @@ The two characters engage in real-time, hands-free spoken debates. The text outp
 | Frame type | Highly articulated plastic body with standard joint hinges | Highly articulated plastic body with standard joint hinges |
 | Tendon routing | Antagonistic pull-pull pairs in PTFE Bowden tubes; arm lines redirected up the acrylic gantry | Antagonistic pull-pull pairs in PTFE Bowden tubes; arm lines redirected up the acrylic gantry |
 
-**Key mechanical implication:** Both Black Series figures feature built-in mechanical pivot pins at the neck, shoulders, and torso. Each pivot is now driven by an **antagonistic pair** of tendons tied directly to the plastic joint hinge — one line pulls the joint one way, its partner pulls it back — so no gesture depends on gravity to reset. Every tendon runs inside a low-friction PTFE (Teflon) Bowden tube glued to the back of the figure; arm lines are redirected up the Transparent Acrylic Gantry mounted behind the stage to pull the shoulders up and out, while the remaining lines route down through the display stage base to the 16 servos hidden beneath the deck. See Section 3 for the full antagonistic strategy and channel map.
+**Key mechanical implication:** Both Black Series figures feature built-in mechanical pivot pins at the neck, shoulders, and torso. Each pivot is now driven by an **antagonistic pair** of tendons tied directly to the plastic joint hinge — one line pulls the joint one way, its partner pulls it back — so no gesture depends on gravity to reset. Every tendon runs inside a low-friction PTFE (Teflon) Bowden tube anchored to the back of the figure via heat-melted channels and 0.5 mm brass wire; arm lines are redirected up the Transparent Acrylic Gantry mounted behind the stage to pull the shoulders up and out, while the remaining lines route down through the display stage base to the 16 servos hidden beneath the deck. See Section 3 for the full antagonistic strategy and channel map.
 
 ---
 
 ## 3. Mechanical Movement Strategy — 16-Servo Antagonistic Design
 
-Physical movement is driven by a full **16-servo antagonistic (pull-pull) system** — eight channels per character — mounted beneath the stage deck and driven by a single PCA9685 board using all 16 of its channels. This replaces the earlier 6-servo single-tendon "pull and let gravity drop" approach.
+Physical movement is driven by a full **16-servo antagonistic (pull-pull) system** — eight channels per character — mounted beneath the stage deck and driven by a single PCA9685 board using all 16 of its channels.
 
-The previous design pulled each limb with a single tendon and relied on gravity (or a return spring) to reset it. Gravity return is slow, imprecise, and jittery: the limb sags to wherever the figure's own weight settles and light plastic joints bounce. The antagonistic design eliminates this entirely. Every axis of motion is controlled by **two opposing tendons** — one servo winds line to pull the joint one way while its partner pays out line, and the roles reverse to drive it back. Because tension is always held on both sides, each joint holds an absolute, jitter-free 3D position with no dependence on gravity.
+Every axis of motion is controlled by **two opposing tendons** — one servo winds line to pull the joint one way while its partner pays out line, and the roles reverse to drive it back. Because tension is always held on both sides, each joint holds an absolute, jitter-free 3D position.
 
 ### Antagonistic Tendon Routing
 
@@ -86,7 +86,7 @@ The PCA9685's full 16 channels are now used: **Darth Vader occupies channels 0�
 
 Each pair is driven complementarily: to nod Vader's head down, ch 0 winds in while ch 1 pays out; to lift it back, the roles reverse. The same pattern applies to all four joints on both characters, giving each figure absolute positional control across head, torso, shoulder, and elbow.
 
-> **Software integration note:** As of v4.0.0 the browser animation layer (`vader_trooper.user.js`) drives the antagonistic pairs directly. A `sendJoint(pair, angle)` helper sends each joint's target angle to `pullA` and its complement (180−angle) to `pullB`. The head-bob loop, arm-raise gesture (shoulder pair lifted up-and-out over the gantry), refusal postures, temperature-noise engine, diff-uncertainty response, and dial→servo forwarding all address joints by name (`JOINTS.VADER_HEAD`, `JOINTS.TROOPER_SHOULDER`, …). Per-servo tension limits are still tuned during Phase 4 calibration.
+> **Software integration note (v5.0.0):** The browser animation layer (`vader_trooper.user.js`) drives the antagonistic pairs via `sendJoint(pair, angle)`, which looks up a per-joint `CALIBRATION_CURVES` piecewise spline to derive the physically correct `pullA` and `pullB` servo angles independently, correcting for non-circular joint kinematics. The head-bob loop, arm-raise gesture (shoulder pair lifted up-and-out over the gantry), refusal postures, temperature-noise engine, diff-uncertainty response, and dial→servo forwarding all address joints by name (`JOINTS.VADER_HEAD`, `JOINTS.TROOPER_SHOULDER`, …). Per-servo soft limits are enforced by the firmware; the ESP32's 1500 ms PWM-release timeout cuts stall current between commands while tendon friction holds the pose.
 
 ---
 
@@ -246,7 +246,7 @@ The stored 0–100 values are then read continuously by the speech engine and th
 | CONCRETENESS | Trooper torso twist (ch 10/11) | Specificity of AI output (affects language model prompt) |
 | STRUCTURE | Trooper shoulder (ch 12/13) | Prose vs. formatted output (affects language model prompt) |
 
-Each dial forwards its position to a joint through `sendJoint()`, which drives the pair antagonistically (`pullA` → angle, `pullB` → 180−angle). The elbow pairs (ch 6/7, ch 14/15) are reserved for future gestures and are not currently dial-bound.
+Each dial forwards its position to a joint through `sendJoint()`, which resolves the correct `pullA` and `pullB` angles via the per-joint `CALIBRATION_CURVES` piecewise spline. The elbow pairs (ch 6/7, ch 14/15) are reserved for future gestures and are not currently dial-bound.
 
 ### Animation Speed — Energy, Verbosity, and Bob Speed
 
@@ -416,7 +416,7 @@ ThinkPad (USB)
 
 ### Power Isolation & Current Budget
 
-Sixteen MG90S servos held under constant antagonistic tension draw far more current than the previous six gravity-return servos, whose idle channels drew almost nothing. Because both tendons in every pair are actively tensioned at all times, all 16 servos can be under load simultaneously. The supply is therefore upgraded from **5 V / 3 A (15 W)** to a **5 V / 15 A (75 W)** switching adapter.
+With all 16 MG90S servos under constant antagonistic tension, all channels can simultaneously be under load. The supply is a dedicated **5 V / 15 A (75 W)** switching adapter.
 
 - The adapter's barrel jack terminates in a **female barrel-to-screw-terminal block**, which breaks out to the PCA9685 **V+ rail** with a solid screwed connection rated for the higher current.
 - The 15 A supply feeds **only** the PCA9685 V+ rail; the ThinkPad USB port provides logic power to the ESP32 only — no servo current passes through the USB bus.
@@ -482,14 +482,13 @@ RobotProject/
 
 ## 10. Development Checklist
 
-> **Status as of 2026-07-13 — Software pipeline v3.4.1; hardware plan pivoted to the v4.0.0 Antagonistic 16-Servo design.**
+> **Status as of 2026-07-14 — v5.0.0. All software complete. Groq Llama 3.3 70B is the mandated model; piecewise spline kinematics active in `sendJoint()`; PWM thermal timeout implemented in firmware; CA glue method fully deprecated. Awaiting physical hardware build (Phase 3).**
 > Digital stack complete with four active dynamic behaviour layers.
 > Both figures animate independently per speaker. Temperature drives physical noise between turns. Dialogue
 > sentiment automatically modulates the /play/persona backstory. The eval iframe feeds a closed-loop score
 > monitor that adjusts live dial values. The /play/diff iframe triggers physical uncertainty responses.
-> Firmware has per-servo soft limits; relay.py has a sweep-test; HUD has a full Calibration panel.
-> All 5 iframes now auto-sync HUD defaults (Model, Tone Dials, Pacing, Refusal) to the main page and all
-> iframes on load — no manual Sync click required. All software work is complete — awaiting hardware.
+> Firmware has per-servo soft limits and 1500 ms PWM stall timeout; relay.py has a sweep-test; HUD has a full Calibration panel.
+> All 5 iframes auto-sync HUD defaults on load; Groq Cloud API mandate enforced at Start Loop.
 
 ### Phase 1 — Digital Pipeline (software only)
 - [x] `relay.py` — WebSocket server receives dial data, forwards to ESP32 via serial
@@ -528,13 +527,12 @@ RobotProject/
 - [x] `.gitignore` created — `server/performance_logs.json`, Python bytecode, Arduino build artefacts, and OS files excluded
 - [x] Auto initial-state sync on load — `syncAll()` fires automatically once all 5 iframes reach Ready; pushes HUD defaults for Model (main page + all iframes via native prototype setter + bubbling events), Tone Dials (main page + all iframes), Pacing (choreographer iframe), and Refusal Threshold (refusal iframe); eliminates the startup desync between HUD defaults and the native page state; ↺ Sync all iframes button now calls `syncAll()` directly, also covering the main page model selector and pacing/refusal controls that the previous two-liner missed
 
-> **All software tooling for Phases 3 and 4 is complete as of 2026-07-11.** The firmware has
-> per-servo soft limits and echoes `ACK:S<ch>:<angle>` after each command. `relay.py` has a
-> full sweep, single-channel test, and live serial-ACK reader. The HUD CALIBRATION panel has
-> per-channel slider, ▶ Test CH, ↓ Set Min, ↑ Set Max, and Sweep All. The loop section shows a
-> session timer, live animation ticks/s, and a health watchdog. v3.4.1 adds automatic full-state
-> sync on page load — HUD defaults propagate to the main page and all iframes immediately without
-> a manual Sync click. Awaiting hardware.
+> **All software tooling for Phases 3 and 4 is complete (v5.0.0, 2026-07-14).** The firmware has
+> per-servo soft limits, echoes `ACK:S<ch>:<angle>` after each command, and cuts PWM after 1500 ms
+> of static hold. `relay.py` has a full sweep, single-channel test, and live serial-ACK reader. The
+> HUD CALIBRATION panel has per-channel slider, ▶ Test CH, ↓ Set Min, ↑ Set Max, and Sweep All.
+> The loop section shows a session timer, live animation ticks/s, and a health watchdog. Groq Cloud
+> API mandate enforced at Start Loop. Awaiting hardware.
 
 ### Phase 3 — Physical Build (hardware — Antagonistic 16-Servo Upgrade)
 - [ ] Stage base constructed with mounting positions for all 16 servos
@@ -545,7 +543,7 @@ RobotProject/
 - [ ] 5 V / 15 A supply wired through the barrel-to-screw-terminal block, isolated and verified safe under full antagonistic load
 
 ### Phase 4 — Integration & Calibration
-- [x] Browser animation layer remapped from the legacy 6-channel scheme onto the 16-channel antagonistic pairs — `sendJoint(pair, angle)` drives every joint (`pullA` → angle, `pullB` → 180−angle); head bob, arm raise, refusal postures, noise engine, diff response, and dial forwarding all address joints by name (Vader 0–7, Trooper 8–15); HUD Calibration dropdown lists all 16 channels
+- [x] Browser animation layer drives all 16-channel antagonistic pairs via `sendJoint(pair, angle)` with per-joint `CALIBRATION_CURVES` piecewise spline interpolation — head bob, arm raise, refusal postures, noise engine, diff response, and dial forwarding all address joints by name (Vader 0–7, Trooper 8–15); HUD Calibration dropdown lists all 16 channels
 - [ ] Per-servo angle limits tuned — move each figure joint by hand to find physical stops; update `SOFT_MIN_ANGLE` / `SOFT_MAX_ANGLE` for all 16 channels in firmware to prevent antagonistic over-tension; use HUD Calibration slider to confirm servo obeys limits
 - [ ] Tone dial → servo speed mapping calibrated — run the autonomous loop and adjust the ENERGY/VERBOSITY animation interval formula until head-bob speed matches speech cadence
 - [ ] Full autonomous loop tested for 10+ minutes without intervention
@@ -557,4 +555,4 @@ RobotProject/
 
 ---
 
-*Last updated: 2026-07-13 — v4.0.0 hardware pivot: Phase 3 mechanical strategy upgraded from a 6-servo single-tendon gravity-return system to a full 16-servo antagonistic (pull-pull) design (Vader ch 0–7, Trooper ch 8–15). Tendons now run in PTFE Bowden tubes routed up a transparent acrylic gantry that acts as a high-angle pulley for arm lifts. Hardware list updated: 16× MG90S, 5 V/15 A supply with barrel-to-screw-terminal block, 20 lb braided PE line, PTFE tubing, clear cast acrylic, CA glue. Sections 2, 3, and 8 rewritten; firmware and relay updated to 16 channels. Browser userscript (v4.0.0) remapped onto the antagonistic pairs via a `sendJoint()` helper — head bob, arm raise, refusal postures, noise engine, diff response, and dial forwarding all address joints by name; HUD Calibration lists all 16 channels.*
+*Last updated: 2026-07-14 — v5.0.0: Groq Cloud API mandate (Groq Llama 3.3 70B required; "Free (in browser)" / WebGPU model prohibited and guarded at loop start); piecewise spline kinematic calibration in `sendJoint()` via `CALIBRATION_CURVES` (linear 180−angle mapping removed); PTFE tube anchoring migrated from CA glue to heated-needle melt channels + 0.5 mm brass wire / micro zip-ties; ESP32 PWM thermal timeout (1500 ms stall cut, `servoReleased` flag) and constraint logic cleanup (`applied` angle passed directly to `moveServo()`, duplicate `constrain()` removed).*

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vader & Trooper Master Control Matrix
 // @namespace    robotproject.local
-// @version      4.0.0
+// @version      5.0.0
 // @description  Floating HUD + same-origin hidden iframe matrix for full shape-models.com pipeline control from /play/tone
 // @author       RobotProject
 // @match        https://www.shape-models.com/play/tone
@@ -25,28 +25,21 @@
      animation intervals, causing stuttering in the physical syllable sync.
   6. The purple HUD panel will appear on the right side of the page.
 
-  WHAT'S NEW IN v4.0.0
+  WHAT'S NEW IN v5.0.0
   ---------------------
-  - Antagonistic 16-servo remap: every joint is now a pull-pull pair driven by
-    sendJoint(pair, angle) — one tendon winds in while its antagonist pays out,
-    holding an absolute, gravity-free position. Vader = ch 0-7, Trooper = ch 8-15.
-  - Dual-character animation: Vader head-nod pair (ch 0/1) bobs while Vader speaks;
-    Trooper head-nod pair (ch 8/9) bobs while the Trooper speaks. Silent figure holds.
-  - Arm gestures raise the shoulder pair up-and-out over the acrylic gantry pulley
-    (Vader ch 4/5, Trooper ch 12/13) at ~40% through each utterance.
-  - Per-speaker voice differentiation: deep male voices for Vader, sharp for Trooper.
-  - Temperature slider now captured as a physical noise source — drives random
-    balanced joint-pair micro-deviations between turns scaled to temperature value.
-  - Sentiment engine: aggressive dialogue auto-injects emotional intensity modifiers
-    into the /play/persona backstory textarea before each generation.
-  - Eval closed-loop feedback: session score below 6.0/10 auto-lowers ENERGY and
-    VERBOSITY dials and returns both heads to neutral.
-  - Diff monitor: Jaccard similarity < 0.35 between /play/diff outputs triggers
-    Trooper torso-twist shake and Vader arm-hold until outputs converge.
-  - HUD Calibration panel: per-channel angle slider, ▶ Test CH, ↓ Set Min,
-    ↑ Set Max, and ⚙ Sweep All Channels for Phase 3/4 hardware bring-up.
-  - Session timer (m:ss) and live animation ticks/s meter in the HUD loop section.
-  - Loop health watchdog: ⚠️ alert after 90 s of loop inactivity.
+  - Groq Cloud API mandate: "Free (in browser)" / WebGPU model prohibited. Groq
+    Llama 3.3 70B (250+ tokens/s) is the required model. A guardrail at Start Loop
+    detects a local model and prompts the operator to switch before proceeding.
+  - Spline kinematic calibration: sendJoint() uses per-joint CALIBRATION_CURVES
+    piecewise linear interpolation to derive pullA and pullB independently,
+    correcting for non-circular joint geometry. Linear 180−angle mapping removed.
+  - Mechanical anchoring: PTFE Bowden tubes secured via heated-needle melt channels
+    and 0.5 mm brass wire / micro zip-ties. CA glue method fully deprecated.
+  - PWM thermal timeout (firmware): ESP32 cuts servo PWM after 1500 ms of static
+    hold to prevent stall-current heating and gear strip. Tendon friction holds the
+    pose; motor stops drawing current. Restored automatically on next move command.
+  - Constraint logic fix (firmware): moveServo() receives the already-clamped
+    applied angle from processLine(); duplicate constrain() call removed.
 
   HUD SECTIONS
   ------------
@@ -286,10 +279,8 @@
     }
 
     // Drive an antagonistic joint pair to a target angle using the per-joint
-    // CALIBRATION_CURVES to account for non-circular joint kinematics.
-    // pullA and pullB are interpolated independently from the calibration waypoints
-    // so each servo reaches the physically correct position rather than the naive
-    // linear complement (180 − angle).
+    // CALIBRATION_CURVES piecewise spline. pullA and pullB are interpolated
+    // independently to correct for non-circular joint kinematics.
     function sendJoint(pair, angle) {
         const curve = CALIBRATION_CURVES[pair[0]];
         if (curve) {

@@ -17,7 +17,7 @@ shape-models.com is an AI behavior design platform built around a set of interac
 
 All five background playgrounds run as hidden iframes inside the main tone tab. A floating HUD injected into the page provides unified control over all of them without switching tabs.
 
-**The hardware side:** two Hasbro Star Wars Black Series figures on a custom stage, sixteen MG90S metal-gear servos mounted beneath the deck in a full antagonistic (pull-pull) layout — eight channels per figure. Tendons run in low-friction PTFE Bowden tubes glued to the backs of the figures; arm lines are redirected up a transparent acrylic gantry behind the stage that acts as a high-angle pulley. An ESP32 running over USB serial receives positional commands from a local Python server and drives a PCA9685 PWM board across all 16 channels, powered by a dedicated 5 V / 15 A supply.
+**The hardware side:** two Hasbro Star Wars Black Series figures on a custom stage, sixteen MG90S metal-gear servos mounted beneath the deck in a full antagonistic (pull-pull) layout — eight channels per figure. Tendons run in low-friction PTFE Bowden tubes anchored to the backs of the figures via heat-melted channels and 0.5 mm brass wire; arm lines are redirected up a transparent acrylic gantry behind the stage that acts as a high-angle pulley. An ESP32 running over USB serial receives positional commands from a local Python server and drives a PCA9685 PWM board across all 16 channels, powered by a dedicated 5 V / 15 A supply.
 
 ---
 
@@ -83,7 +83,7 @@ The figures use a full 16-channel antagonistic (pull-pull) layout — each joint
 
 Each pair moves complementarily — winding one tendon in while its partner pays out — so every joint holds an absolute, jitter-free position without relying on gravity.
 
-> **Software note:** The browser userscript (v4.0.0) drives these pairs through a `sendJoint(pair, angle)` helper — each joint command sends the target angle to one channel and its complement (180−angle) to the antagonist, so the mock-mode output below shows both channels of a pair moving together.
+> **Software note:** The browser userscript (v5.0.0) drives these pairs through a `sendJoint(pair, angle)` helper — each joint command resolves the correct `pullA` and `pullB` positions via a per-joint `CALIBRATION_CURVES` piecewise spline, so the mock-mode output below shows both channels of a pair moving to their calibrated positions together.
 
 ---
 
