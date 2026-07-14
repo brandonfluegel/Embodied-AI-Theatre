@@ -16,16 +16,6 @@ The background playgrounds each handle a specific job. `/play/persona` receives 
 
 ---
 
-## The Cloud API Mandate
-
-The illusion of life depends on near-zero latency between speaking turns. The show must run on **Groq Llama 3.3 70B** via the cloud API, which delivers 250-plus tokens per second. The shape-models.com "Free (in browser)" option is not supported and must not be used.
-
-The reason is architectural. Local WebGPU inference runs on the JavaScript main thread. JavaScript is single-threaded, so while the browser processes token predictions, the 50 ms servo animation intervals that keep head movement and arm gestures synchronized with speech cannot fire. The practical result is stuttering, dropped animation frames, and dead-air pauses between characters that break the illusion entirely. Groq offloads all inference to a cloud endpoint, leaving the main thread entirely free for physical animation.
-
-Before starting the loop, select Groq Llama 3.3 70B from the model dropdown. A guardrail built into the Start Loop button detects a local model and prompts the operator before the loop is allowed to proceed.
-
----
-
 ## The Hardware: 16-Servo Antagonistic Rig (v5.0.0)
 
 The physical movement system is hidden beneath the stage deck. Sixteen MG90S metal-gear servos (eight per character) are controlled by an ESP32 microcontroller over I2C through a PCA9685 16-channel PWM board, powered by a dedicated 5V/15A supply. Four aspects of the engineering are worth understanding before building or calibrating the rig.
