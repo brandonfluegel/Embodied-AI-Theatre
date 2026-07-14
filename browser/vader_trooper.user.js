@@ -62,6 +62,7 @@
     const WS_URL                 = 'ws://localhost:8765';
     const RECONNECT_MS           = 2000;
     const STREAM_END_DEBOUNCE_MS = 850;
+    const DIFF_TOGGLE_DEBOUNCE_MS = 2000;
     const IFRAME_READY_DELAY_MS  = 2500;   // ms after iframe load to let React hydrate
 
     // Build iframe URLs from the current tab's origin so the script works on
@@ -187,6 +188,7 @@
 
     let animationTimer = null;
     let animPhase      = 0;
+    let panTimer       = null;
 
     let streamDebounce  = null;
     let lastSpokenText  = '';
@@ -218,6 +220,7 @@
     let temperatureValue    = 50;   // Temperature slider normalized 0-100 (noise source)
     let noiseTimer          = null; // setInterval handle for inter-turn servo noise
     let diffUncertaintyActive = false; // true while diff outputs are divergent
+    let lastDiffToggleAt      = 0;     // timestamp of last diff uncertainty state transition
     let lastSentiment       = 'neutral'; // 'neutral' or 'aggressive'
     let watchdogTimer    = null;         // setInterval for loop-health check
     let lastTurnTime     = 0;            // Date.now() stamp of last completed turn
@@ -941,6 +944,10 @@
         cleanupObservers();
         window.speechSynthesis.cancel();
         stopAnimation();
+        if (panTimer) {
+            clearInterval(panTimer);
+            panTimer = null;
+        }
         stopNoiseInterval();
     }
 
@@ -1117,8 +1124,16 @@
             textA.includes('Loading') || textB.includes('Loading')) return;
 
         const sim = textSimilarity(textA, textB);
-        if (sim < 0.35 && !diffUncertaintyActive) triggerDiffUncertainty();
-        else if (sim >= 0.35 && diffUncertaintyActive) resolveDiffUncertainty();
+        const shouldBeUncertain = sim < 0.35;
+        if (shouldBeUncertain === diffUncertaintyActive) return;
+
+        // Strict debounce: prevent rapid state flapping during streaming mutations.
+        const now = Date.now();
+        if (now - lastDiffToggleAt < DIFF_TOGGLE_DEBOUNCE_MS) return;
+        lastDiffToggleAt = now;
+
+        if (shouldBeUncertain) triggerDiffUncertainty();
+        else resolveDiffUncertainty();
     }
 
     // Stormtrooper whole-body shake via the torso twist pair (TROOPER_TORSO ch 10/11)
@@ -1126,9 +1141,15 @@
     function triggerDiffUncertainty() {
         diffUncertaintyActive = true;
         let panStep = 0;
-        const panTimer = setInterval(() => {
+
+        // Ensure only one shake interval can exist at a time.
+        if (panTimer) clearInterval(panTimer);
+        panTimer = setInterval(() => {
             sendJoint(JOINTS.TROOPER_TORSO, panStep % 2 === 0 ? 60 : 120);
-            if (++panStep >= 6) clearInterval(panTimer);   // 3 full side-to-side swings
+            if (++panStep >= 6) {
+                clearInterval(panTimer);   // 3 full side-to-side swings
+                panTimer = null;
+            }
         }, 200);
         sendJoint(JOINTS.VADER_SHOULDER, 135);   // Vader arm up and holds
         updateHudStatus('diff', '⚠️ Divergent', '#f59e0b');
@@ -1137,6 +1158,10 @@
 
     function resolveDiffUncertainty() {
         diffUncertaintyActive = false;
+        if (panTimer) {
+            clearInterval(panTimer);
+            panTimer = null;
+        }
         sendJoint(JOINTS.VADER_SHOULDER, 90);        // Vader arm returns
         sendJoint(JOINTS.TROOPER_TORSO, 90);         // Trooper torso re-centres
         updateHudStatus('diff', '✓ Converged', '#4ade80');
