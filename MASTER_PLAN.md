@@ -50,7 +50,7 @@ Each degree of freedom is a matched servo pair working in opposition:
 - Neutral is a balance point where both tendons hold equal tension
 - The controller drives the pair in complementary directions, so there is always active tension on both sides and zero backlash
 
-To eliminate the friction losses that would otherwise fight the antagonistic tension, every tendon now runs inside a **PTFE (Teflon) Bowden tube — 2 mm OD / 1 mm ID**. The tubes are glued flat to the backs of the plastic figures with thick CA glue so each line slides through a low-friction sheath from the joint anchor all the way down to the servo horn, rather than dragging across plastic edges.
+To eliminate the friction losses that would otherwise fight the antagonistic tension, every tendon now runs inside a **PTFE (Teflon) Bowden tube — 2 mm OD / 1 mm ID**. The tubes are anchored to the backs of the plastic figures by using a heated needle to melt tiny channels directly through the PVC/ABS plastic of each figure, then physically securing each PTFE Bowden tube with 0.5 mm brass wire or micro zip-ties threaded through those channels for high-tension stability. This mechanical anchoring prevents tube pull-out under the sustained antagonistic tension loads that would eventually defeat an adhesive bond.
 
 ### The Transparent Acrylic Gantry
 
@@ -352,7 +352,7 @@ Model selection and persona field changes follow the same pattern, targeting `<s
 | Tendon line | 20 lb black braided PE fishing line | Zero-stretch, zero-memory tendon — holds antagonistic tension precisely |
 | Tendon sheath | PTFE tubing, 1 mm ID × 2 mm OD (3 m) | Low-friction Bowden routing on the backs of the figures |
 | Gantry | 1/8" (3 mm) clear cast acrylic sheet, 12" × 12" | Invisible "T" board — high-angle pulley for arm lifts |
-| Adhesive | Thick CA glue (cyanoacrylate) | Bonds PTFE tubes to the figures and the gantry |
+| Tube anchoring | 0.5 mm brass wire + micro zip-ties | Physically anchor PTFE Bowden tubes through heat-melted channels in the figures' PVC/ABS plastic |
 | Cable management | Mini zip ties | Bundles the 16 servo leads and tendon runs |
 | Host computer | Lenovo ThinkPad | Runs relay.py, browser userscripts, and HTML dashboard |
 
@@ -364,7 +364,7 @@ Model selection and persona field changes follow the same pattern, targeting `<s
 - **20 lb black braided PE fishing line** (zero stretch, zero memory)
 - **3 m of 1 mm ID × 2 mm OD PTFE tubing**
 - **1/8" (3 mm) clear cast acrylic sheet, 12" × 12"**
-- **Thick CA glue** (cyanoacrylate) + **mini zip ties** for cable management
+- **0.5 mm brass wire** + **micro zip-ties** — physically anchor each PTFE Bowden tube through heat-melted channels in the figures' PVC/ABS plastic for high-tension stability (do **not** use CA glue; it cannot hold sustained antagonistic pull loads)
 
 ### Wiring Diagram
 
@@ -520,7 +520,7 @@ RobotProject/
 ### Phase 3 — Physical Build (hardware — Antagonistic 16-Servo Upgrade)
 - [ ] Stage base constructed with mounting positions for all 16 servos
 - [ ] Transparent acrylic "T" gantry cut from 1/8" clear cast acrylic and mounted invisibly behind the figures
-- [ ] PTFE Bowden tubes (1 mm ID × 2 mm OD) glued to the backs of the figures with thick CA glue; arm tubes routed over the gantry as high-angle pulleys
+- [ ] PTFE Bowden tubes (1 mm ID × 2 mm OD) anchored to the backs of the figures using a heated needle to melt channels through the PVC/ABS plastic, then secured with 0.5 mm brass wire or micro zip-ties for high-tension stability; arm tubes routed over the gantry as high-angle pulleys
 - [ ] Antagonistic tendon pairs (20 lb braided PE line) anchored to each joint hinge and to opposing servo horns
 - [ ] All 16 MG90S servos wired to the PCA9685 and tested independently (relay sweep covers ch 0–15)
 - [ ] 5 V / 15 A supply wired through the barrel-to-screw-terminal block, isolated and verified safe under full antagonistic load

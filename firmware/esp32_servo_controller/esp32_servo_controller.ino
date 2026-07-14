@@ -65,6 +65,16 @@ static const uint8_t  BUF_SIZE    = 16;
 static char           inputBuf[BUF_SIZE];
 static uint8_t        bufIndex    = 0;
 
+// ── Thermal protection (PWM-release timeout) ──────────────────────
+// Tracks the millis() timestamp of the last movement on each channel.
+// If a channel holds a static position for longer than STALL_TIMEOUT_MS,
+// the PWM output is cut to zero so the motor stops drawing stall current.
+// The antagonistic tendon friction holds the physical pose; no active torque
+// is needed. The release is cleared automatically on the next move command.
+static const uint32_t STALL_TIMEOUT_MS        = 1500;
+static       uint32_t lastMoveTime[NUM_SERVOS];   // zero-initialised; updated by moveServo()
+static       bool     servoReleased[NUM_SERVOS];  // true after PWM cut; cleared on next move
+
 // ── Helpers ───────────────────────────────────────────────────────
 
 /**
@@ -76,9 +86,10 @@ uint16_t angleToPulse(int angle) {
 }
 
 void moveServo(uint8_t ch, int angle) {
-    // Clamp to per-servo soft limits before converting to pulse count.
-    // Adjust SOFT_MIN_ANGLE / SOFT_MAX_ANGLE during Phase 4 calibration.
-    angle = constrain(angle, SOFT_MIN_ANGLE[ch], SOFT_MAX_ANGLE[ch]);
+    // Record movement time and clear the thermal-release flag so the watchdog
+    // does not immediately re-cut power after a new command arrives.
+    lastMoveTime[ch]  = millis();
+    servoReleased[ch] = false;
     pca.setPWM(ch, 0, angleToPulse(angle));
 }
 
@@ -92,7 +103,7 @@ void processLine(const char* line) {
 
     int raw     = constrain(angle, 0, 180);
     int applied = constrain(raw, SOFT_MIN_ANGLE[ch], SOFT_MAX_ANGLE[ch]);
-    moveServo((uint8_t)ch, raw);
+    moveServo((uint8_t)ch, applied);
     // Echo the effective (soft-clamped) angle back over serial.
     // relay.py logs these as [ESP32] ACK:S<ch>:<angle> to confirm live wiring.
     Serial.print("ACK:S");
@@ -120,6 +131,18 @@ void setup() {
 }
 
 void loop() {
+    // Thermal protection: if any channel has held a static position for longer
+    // than STALL_TIMEOUT_MS, cut its PWM output to prevent stall-current heating
+    // and gear strip. The servoReleased flag prevents redundant I2C writes on
+    // subsequent iterations. Antagonistic tendon friction holds the pose.
+    const uint32_t now = millis();
+    for (uint8_t ch = 0; ch < NUM_SERVOS; ch++) {
+        if (!servoReleased[ch] && (now - lastMoveTime[ch]) > STALL_TIMEOUT_MS) {
+            pca.setPWM(ch, 0, 0);
+            servoReleased[ch] = true;
+        }
+    }
+
     while (Serial.available() > 0) {
         char c = (char)Serial.read();
 

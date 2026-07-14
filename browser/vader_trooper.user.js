@@ -98,6 +98,35 @@
         TROOPER_SHOULDER: [12, 13],
         TROOPER_ELBOW:    [14, 15],
     };
+
+    // Piecewise linear calibration curves for each antagonistic joint pair.
+    // Key = pullA channel number (pair[0]).
+    // Value = array of [targetAngle, pullA_angle, pullB_angle] waypoints,
+    //         sorted ascending by targetAngle.
+    // sendJoint() interpolates between these points so that non-circular joint
+    // kinematics (lever-arm variation, tendon wrap geometry) are corrected
+    // independently for each servo. Tune during Phase 4 calibration: command a
+    // target angle via the HUD, measure the actual joint position, and adjust
+    // pullA / pullB at each waypoint until the physical pose matches.
+    const CALIBRATION_CURVES = {
+        //         [target, pullA, pullB]  —  Vader head nod      (ch 0 / 1)
+        0:  [ [0, 0, 180], [45, 40, 143], [90, 90, 90], [135, 140, 37], [180, 180, 0] ],
+        //         [target, pullA, pullB]  —  Vader torso twist   (ch 2 / 3)
+        2:  [ [0, 0, 180], [45, 43, 138], [90, 90, 90], [135, 137, 43], [180, 180, 0] ],
+        //         [target, pullA, pullB]  —  Vader shoulder      (ch 4 / 5)
+        4:  [ [0, 0, 180], [45, 44, 140], [90, 90, 90], [135, 136, 44], [180, 180, 0] ],
+        //         [target, pullA, pullB]  —  Vader elbow         (ch 6 / 7)
+        6:  [ [0, 0, 180], [45, 42, 139], [90, 90, 90], [135, 138, 42], [180, 180, 0] ],
+        //         [target, pullA, pullB]  —  Trooper head nod    (ch 8 / 9)
+        8:  [ [0, 0, 180], [45, 41, 142], [90, 90, 90], [135, 139, 41], [180, 180, 0] ],
+        //         [target, pullA, pullB]  —  Trooper torso twist (ch 10 / 11)
+        10: [ [0, 0, 180], [45, 43, 138], [90, 90, 90], [135, 137, 43], [180, 180, 0] ],
+        //         [target, pullA, pullB]  —  Trooper shoulder    (ch 12 / 13)
+        12: [ [0, 0, 180], [45, 44, 140], [90, 90, 90], [135, 136, 44], [180, 180, 0] ],
+        //         [target, pullA, pullB]  —  Trooper elbow       (ch 14 / 15)
+        14: [ [0, 0, 180], [45, 42, 139], [90, 90, 90], [135, 138, 42], [180, 180, 0] ],
+    };
+
     const ALL_JOINTS = Object.values(JOINTS);
 
     // Per-speaker joint selectors
@@ -232,13 +261,42 @@
         }
     }
 
-    // Drive an antagonistic joint pair to a target angle. pullA is driven to the
-    // angle and pullB to its complement (180−angle), so one tendon winds in while
-    // its antagonist pays out and the joint holds a jitter-free, gravity-free pose.
+    // Piecewise linear interpolation over a CALIBRATION_CURVES waypoint array.
+    // Returns { pullA, pullB } for the given target angle.
+    function interpolateCurve(curve, target) {
+        const t = Math.max(0, Math.min(180, target));
+        if (t <= curve[0][0])                   return { pullA: curve[0][1],              pullB: curve[0][2] };
+        if (t >= curve[curve.length - 1][0])    return { pullA: curve[curve.length-1][1], pullB: curve[curve.length-1][2] };
+        for (let i = 0; i < curve.length - 1; i++) {
+            const lo = curve[i], hi = curve[i + 1];
+            if (t >= lo[0] && t <= hi[0]) {
+                const frac = (t - lo[0]) / (hi[0] - lo[0]);
+                return {
+                    pullA: Math.round(lo[1] + frac * (hi[1] - lo[1])),
+                    pullB: Math.round(lo[2] + frac * (hi[2] - lo[2])),
+                };
+            }
+        }
+        return { pullA: Math.round(t), pullB: Math.round(180 - t) };
+    }
+
+    // Drive an antagonistic joint pair to a target angle using the per-joint
+    // CALIBRATION_CURVES to account for non-circular joint kinematics.
+    // pullA and pullB are interpolated independently from the calibration waypoints
+    // so each servo reaches the physically correct position rather than the naive
+    // linear complement (180 − angle).
     function sendJoint(pair, angle) {
-        const a = Math.round(Math.max(0, Math.min(180, angle)));
-        sendServo(pair[0], a);
-        sendServo(pair[1], 180 - a);
+        const curve = CALIBRATION_CURVES[pair[0]];
+        if (curve) {
+            const { pullA, pullB } = interpolateCurve(curve, angle);
+            sendServo(pair[0], pullA);
+            sendServo(pair[1], pullB);
+        } else {
+            // Fallback for any uncalibrated pair — linear antagonist mapping.
+            const a = Math.round(Math.max(0, Math.min(180, angle)));
+            sendServo(pair[0], a);
+            sendServo(pair[1], 180 - a);
+        }
     }
 
     // ── React DOM helpers ─────────────────────────────────────────
