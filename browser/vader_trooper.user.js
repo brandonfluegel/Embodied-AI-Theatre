@@ -75,27 +75,6 @@
         eval:          `${ORIGIN}/play/eval`,
     };
 
-    // Provider and model names must match the strings in shape-models.com's dropdowns exactly.
-    // Verify against the live site if the model selectors stop syncing.
-    const PROVIDERS = [
-        'Free (in browser)',
-        'Anthropic',
-        'OpenAI',
-    ];
-
-    // Models keyed by provider. Populate Anthropic / OpenAI entries once their
-    // exact option strings are confirmed against the live site.
-    const MODELS = {
-        'Free (in browser)': [
-            'Qwen 2.5 0.5B - 280MB free',
-            'Llama 3.2 1B - 1.1GB free \u00b7 recommended',
-            'Llama 3.2 3B - 2.0GB free',
-            'Phi 3.5 Mini - 2.1GB free',
-        ],
-        'Anthropic': [],
-        'OpenAI':    [],
-    };
-
     // Scoring criteria prepended to every /play/eval submission.
     // The eval AI scores the debate session on these five dimensions and returns structured feedback.
     const EVAL_SCORING_CRITERIA =
@@ -194,8 +173,6 @@
     // iframe registry: { key → { el: HTMLIFrameElement, ready: boolean } }
     const iframes = {};
 
-    let selectedProvider = 'Free (in browser)';
-    let selectedModel    = MODELS['Free (in browser)'][0];
     let hudCollapsed     = false;
     let currentSpeaker = 'vader';   // 'vader' or 'trooper' — whose turn is active
     let turnCount      = 0;         // increments on each cleanly completed turn
@@ -706,31 +683,6 @@
         }
     }
 
-    // Push the selected provider and model to every ready iframe.
-    // The Provider dropdown is set immediately; the Model dropdown is set inside a
-    // 150 ms setTimeout so React has time to unmount the old options list and mount
-    // the new one before we attempt to select a value from it.
-    function syncModelToIframes(provider, model) {
-        for (const [, frame] of Object.entries(iframes)) {
-            if (!frame.ready) continue;
-            const doc = frame.el.contentDocument;
-            const win = frame.el.contentWindow;
-            let providerEl = null;
-            let modelEl    = null;
-            for (const el of doc.querySelectorAll('select, [role="combobox"]')) {
-                const parentText = (el.parentElement?.textContent || '').toUpperCase();
-                if (!providerEl && parentText.includes('PROVIDER')) providerEl = el;
-                if (!modelEl    && parentText.includes('MODEL'))    modelEl    = el;
-            }
-            if (providerEl) setReactValue(providerEl, provider, win);
-            if (modelEl) {
-                const elRef  = modelEl;
-                const winRef = win;
-                setTimeout(() => setReactValue(elRef, model, winRef), 150);
-            }
-        }
-    }
-
     // Push a value into a named text field inside the /play/persona iframe.
     function syncPersonaField(fieldLabel, value) {
         const frame = iframes.persona;
@@ -1152,42 +1104,19 @@
     // Called automatically once all 5 hidden iframes have reached 'Ready', and also
     // bound directly to the ↺ Sync all iframes HUD button.
     function syncAll() {
-        // 1a ── Identify Provider and Model dropdowns on the main page by immediate parent label
-        let mainProviderEl = null;
-        let mainModelEl    = null;
-        for (const el of document.querySelectorAll('select, [role="combobox"]')) {
-            if (el.closest('#vt-hud')) continue;   // never touch HUD's own selects
-            const parentText = (el.parentElement?.textContent || '').toUpperCase();
-            if (!mainProviderEl && parentText.includes('PROVIDER')) mainProviderEl = el;
-            if (!mainModelEl    && parentText.includes('MODEL'))    mainModelEl    = el;
+        // 1 ── Tone dials → main page + all iframes
+        for (const [name, val] of Object.entries(dialValues)) {
+            pushDialToMainPage(name, val);
         }
+        syncAllDials();
 
-        // 1b ── Set Provider now so React can unmount + remount the Model options list
-        if (mainProviderEl) setReactValue(mainProviderEl, selectedProvider, window);
+        // 2 ── Pacing → choreographer iframe
+        syncChoreographerSlider(0, hudBobSpeed);
+        syncChoreographerSlider(1, hudTurnPause);
 
-        // 1c ── After 150 ms React has repopulated the Model options; set Model and run
-        //       all remaining syncs inside the same timeout to prevent state collisions
-        //       with the Provider change event that just fired above.
-        setTimeout(() => {
-            if (mainModelEl) setReactValue(mainModelEl, selectedModel, window);
-
-            // Provider + Model → all iframes (each iframe applies its own 150 ms model delay)
-            syncModelToIframes(selectedProvider, selectedModel);
-
-            // 2 ── Tone dials → main page + all iframes
-            for (const [name, val] of Object.entries(dialValues)) {
-                pushDialToMainPage(name, val);
-            }
-            syncAllDials();
-
-            // 3 ── Pacing → choreographer iframe
-            syncChoreographerSlider(0, hudBobSpeed);
-            syncChoreographerSlider(1, hudTurnPause);
-
-            // 4 ── Refusal threshold → refusal iframe
-            const refusalEl = document.getElementById('vt-refusal');
-            if (refusalEl) syncRefusalThreshold(parseInt(refusalEl.value, 10));
-        }, 150);
+        // 3 ── Refusal threshold → refusal iframe
+        const refusalEl = document.getElementById('vt-refusal');
+        if (refusalEl) syncRefusalThreshold(parseInt(refusalEl.value, 10));
     }
 
     // ── Iframe manager ────────────────────────────────────────────
@@ -1213,7 +1142,6 @@
                         for (const [name, val] of Object.entries(dialValues)) {
                             syncDialInDoc(doc, iframe.contentWindow, name, val);
                         }
-                        syncModelToIframes(selectedProvider, selectedModel);
                         if (key === 'diff') initDiffMonitor();   // Feature 4
                         // Once every iframe has successfully reached Ready, run a full
                         // initial sync so the main page and all iframes share the HUD's
@@ -1265,14 +1193,6 @@
                 <span id="vt-dial-${name.toLowerCase()}-val" class="vt-num">50</span>
             </div>`).join('');
 
-        const providerOpts = PROVIDERS.map(p =>
-            `<option value="${p}">${p}</option>`
-        ).join('');
-
-        const initialModelOpts = (MODELS[PROVIDERS[0]] || []).map(m =>
-            `<option value="${m}">${m}</option>`
-        ).join('');
-
         const iframeRows = Object.keys(IFRAME_PAGES).map(key => `
             <div class="vt-row">
                 <span class="vt-lbl">${key}</span>
@@ -1289,12 +1209,6 @@
 
                 <div class="vt-sec">
                     <span id="vt-status-ws" style="font-size:11px;color:#f87171">🔴 Relay offline</span>
-                </div>
-
-                <div class="vt-sec">
-                    <div class="vt-sec-title">MODEL</div>
-                    <select id="vt-provider" class="vt-select" style="margin-bottom:5px">${providerOpts}</select>
-                    <select id="vt-model" class="vt-select">${initialModelOpts}</select>
                 </div>
 
                 <div class="vt-sec">
@@ -1559,25 +1473,6 @@
                 syncRefusalThreshold(parseInt(refusalSlider.value, 10));
             });
         }
-
-        // Provider dropdown — repopulates the HUD model list, updates state, then
-        // delegates the full staggered page sync to syncAll() to avoid re-entrant
-        // change events on the native dropdowns.
-        document.getElementById('vt-provider').addEventListener('change', e => {
-            selectedProvider   = e.target.value;
-            const models       = MODELS[selectedProvider] || [];
-            const modelSel     = document.getElementById('vt-model');
-            modelSel.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
-            selectedModel      = models[0] || '';
-            modelSel.value     = selectedModel;
-            syncAll();
-        });
-
-        // Model dropdown — updates state only, then delegates full staggered sync.
-        document.getElementById('vt-model').addEventListener('change', e => {
-            selectedModel = e.target.value;
-            syncAll();
-        });
 
         // Persona name inputs → /play/persona iframe
         document.getElementById('vt-p-vader').addEventListener('change', e => {
