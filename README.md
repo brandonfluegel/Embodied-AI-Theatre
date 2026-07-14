@@ -1,174 +1,49 @@
-﻿# Embodied AI Theatre -- Featuring Darth Vader & Stormtrooper
+﻿# Embodied AI Theatre: Darth Vader vs. Stormtrooper (v5.0.0)
 
-A personal project by **Brandon Fluegel**, human factors researcher.
+**A project by Brandon Fluegel, human factors researcher.**
 
-**The research question:** Does giving an AI a physical body change how people experience it? Screen-based AI is perceived as a tool. An AI that occupies shared physical space, moves while it speaks, and reacts with its body to what another character just said reads differently to observers. This project is a working prototype to study that difference firsthand.
-
-**How shape-models.com is being used:**
-
-shape-models.com is an AI behavior design platform built around a set of interactive playgrounds. This project treats it as the full generative backbone of a two-character debate system and drives all six of its playgrounds simultaneously from a single browser tab:
-
-- **/play/tone** is the main control surface. Six dials (Warmth, Verbosity, Energy, Directness, Concreteness, Structure) are read continuously. Each dial value shapes AI language output, adjusts the voice synthesis parameters, and controls the speed and character of the servo movements in real time.
-- **/play/persona** is used to define each character's identity, backstory, and voice. Darth Vader and the Stormtrooper are configured as distinct AI personas that maintain consistent speech patterns across the debate.
-- **/play/refusal** handles content boundaries. When a refusal phrase is detected in the output stream, the script cancels speech and moves both figures into a defined defensive posture rather than continuing.
-- **/play/diff** provides side-by-side prompt comparison to test how parameter changes affect output quality and character consistency.
-- **/play/eval** receives the session telemetry log after each run for automated scoring of the dialogue.
-- **/play/choreographer** is loaded in the background for conversation pacing. The HUD Bob Speed and Turn Pause sliders push their values into the choreographer's range controls in real time.
-
-All five background playgrounds run as hidden iframes inside the main tone tab. A floating HUD injected into the page provides unified control over all of them without switching tabs.
-
-**The hardware side:** two Hasbro Star Wars Black Series figures on a custom stage, sixteen MG90S metal-gear servos mounted beneath the deck in a full antagonistic (pull-pull) layout — eight channels per figure. Tendons run in low-friction PTFE Bowden tubes anchored to the backs of the figures via heat-melted channels and 0.5 mm brass wire; arm lines are redirected up a transparent acrylic gantry behind the stage that acts as a high-angle pulley. An ESP32 running over USB serial receives positional commands from a local Python server and drives a PCA9685 PWM board across all 16 channels, powered by a dedicated 5 V / 15 A supply.
+The central question driving this build is a human factors one: does giving an AI a physical body change how people experience it? A screen-based AI is perceived as a tool. An AI that occupies shared physical space, nods when it makes a point, raises an arm for emphasis, and physically recoils from a rebuke reads differently to observers. This project is a working prototype to study that difference.
 
 ---
 
-## The Software Pieces — What Does What?
+## The Vision
 
-**`browser/vader_trooper.user.js`** — The browser script
-
-This is a Tampermonkey userscript that lives inside Google Chrome. It drives the full embodied AI theatre loop:
-
-- Waits for the AI to finish writing a response, then reads it out loud — Darth Vader with a deep male voice, the Stormtrooper with a sharper, distinct voice
-- While each character speaks, animates that character’s head-nod pair (Vader ch 0/1, Trooper ch 8/9) and fires a dramatic arm raise on the shoulder pair (Vader ch 4/5, Trooper ch 12/13) at ~40% through the utterance
-- Reads the six tone dials and the Temperature slider: dials shape voice rate and motor intervals; Temperature drives a physical noise engine that twitches servos at random intervals during silence
-- Detects aggressive dialogue sentiment and injects emotional intensity modifiers into the /play/persona backstory in real time
-- Monitors the /play/eval iframe’s scoring output and automatically lowers ENERGY and VERBOSITY dials if session quality drops below threshold
-- Watches the /play/diff iframe for wildly divergent outputs and triggers a Stormtrooper torso-twist shake and Vader shoulder-hold response
-- Provides a floating HUD sidebar with sections for model selection, tone dials, persona, pacing, refusal threshold, evaluation, calibration, and iframe status
-
-**`server/relay.py`** — The local data bridge
-
-This is a small Python program that runs in the background the whole time the theatre is running. It:
-
-- Opens a local WebSocket server so the browser script has somewhere to send commands
-- Forwards servo commands (`S<ch>:<angle>`) down the USB cable to the ESP32
-- Reads ACK responses echoed back by the ESP32 and logs them to the terminal
-- Handles a full sweep test and a single-channel isolation test for Phase 3 wiring verification
-- Handles session replay requests: reads `performance_logs.json` and sends the full log back to the browser
-- Logs eval-feedback events when the eval AI score triggers automatic dial adjustments
-- Has a built-in **`MOCK_MODE` flag** at the top of the file — when `True`, it prints simulated commands instead of opening a serial port, so you can run the full pipeline without hardware
-
-**`firmware/esp32_servo_controller/esp32_servo_controller.ino`** — The motor firmware
-
-This is the code that lives on the ESP32 microcontroller chip itself. It:
-
-- Listens to the USB cable at 115200 baud for incoming `S<ch>:<angle>` commands
-- Clamps each angle to per-servo soft limits (`SOFT_MIN_ANGLE` / `SOFT_MAX_ANGLE` arrays) before moving — edit these during Phase 4 calibration
-- Tells the PCA9685 driver board to move the correct servo to the clamped angle
-- Echoes `ACK:S<ch>:<applied_angle>` back over serial so relay.py can log the effective angle
+This is not a chatbot. This is an autonomous, physical-digital AI theatre that runs on a desktop. Two characters, Darth Vader and an Imperial Stormtrooper (1/12-scale Hasbro Black Series figures), hold unscripted spoken debates without any human input once the show starts. Each character has a synthesized voice, a distinct AI persona, and a physical body that moves in coordination with its speech. The loop runs indefinitely: one character speaks, the other listens and then responds, with the physical performance driving the full experience.
 
 ---
 
-## Motor Channel Map
+## The Digital Brain: The shape-models.com Matrix
 
-The figures use a full 16-channel antagonistic (pull-pull) layout — each joint is a matched servo pair, one channel pulls while its partner pulls back. Darth Vader is on channels 0–7, the Stormtrooper on channels 8–15.
+The show is controlled from a single browser tab. A Tampermonkey userscript (`vader_trooper.user.js`) is injected into the shape-models.com `/play/tone` page, where it builds a hidden iframe matrix that orchestrates six playgrounds simultaneously.
 
-| Channel | Toy | Joint | Antagonistic role |
-|---|---|---|---|
-| 0 | Darth Vader | Head nod | Pull down |
-| 1 | Darth Vader | Head nod | Pull back |
-| 2 | Darth Vader | Torso twist | Pull left |
-| 3 | Darth Vader | Torso twist | Pull right |
-| 4 | Darth Vader | Shoulder | Pull up-forward |
-| 5 | Darth Vader | Shoulder | Pull down-back |
-| 6 | Darth Vader | Elbow | Curl in |
-| 7 | Darth Vader | Elbow | Extend out |
-| 8 | Stormtrooper | Head nod | Pull down |
-| 9 | Stormtrooper | Head nod | Pull back |
-| 10 | Stormtrooper | Torso twist | Pull left |
-| 11 | Stormtrooper | Torso twist | Pull right |
-| 12 | Stormtrooper | Shoulder | Pull up-forward |
-| 13 | Stormtrooper | Shoulder | Pull down-back |
-| 14 | Stormtrooper | Elbow | Curl in |
-| 15 | Stormtrooper | Elbow | Extend out |
+The `/play/tone` tab is the master surface. Six tone dials (Warmth, Verbosity, Energy, Directness, Concreteness, Structure) shape the AI text output, the voice synthesis parameters, and the speed of every servo movement at the same time. A floating HUD panel on the right side of the page provides unified control without switching tabs.
 
-Each pair moves complementarily — winding one tendon in while its partner pays out — so every joint holds an absolute, jitter-free position without relying on gravity.
-
-> **Software note:** The browser userscript (v5.0.0) drives these pairs through a `sendJoint(pair, angle)` helper — each joint command resolves the correct `pullA` and `pullB` positions via a per-joint `CALIBRATION_CURVES` piecewise spline, so the mock-mode output below shows both channels of a pair moving to their calibrated positions together.
+The background playgrounds each handle a specific job. `/play/persona` receives the active speaker's name and, when the script detects aggressive dialogue sentiment, an emotional intensity modifier injected directly into the backstory textarea before each generation. `/play/choreographer` controls head-bob speed and the pause between speaking turns. `/play/refusal` monitors for AI safety boundaries; when one triggers, both figures freeze into a defined defensive posture (Vader bows his head, the Trooper snaps to attention). `/play/diff` watches for divergent prompt outputs using Jaccard word-overlap scoring; when similarity drops below 0.35, the Trooper shakes side-to-side and Vader holds an arm raised. `/play/eval` runs closed-loop feedback: if the running transcript scores below 6.0 out of 10 on five drama criteria, the script lowers the energy and verbosity dials on both characters in real time.
 
 ---
 
-## Getting Started — Test It Right Now (No Hardware Needed)
+## The Cloud API Mandate
 
-You can run the full pipeline today using mock mode. No ESP32, no motors, no wiring required. You just need Chrome and Python.
+The illusion of life depends on near-zero latency between speaking turns. The show must run on **Groq Llama 3.3 70B** via the cloud API, which delivers 250-plus tokens per second. The shape-models.com "Free (in browser)" option is not supported and must not be used.
 
-**Step 1 — Install the browser script**
+The reason is architectural. Local WebGPU inference runs on the JavaScript main thread. JavaScript is single-threaded, so while the browser processes token predictions, the 50 ms servo animation intervals that keep head movement and arm gestures synchronized with speech cannot fire. The practical result is stuttering, dropped animation frames, and dead-air pauses between characters that break the illusion entirely. Groq offloads all inference to a cloud endpoint, leaving the main thread entirely free for physical animation.
 
-- Install the [Tampermonkey](https://www.tampermonkey.net/) extension in Google Chrome
-- Click the Tampermonkey icon in your toolbar and choose **Create a new script**
-- Delete all the placeholder code in the editor
-- Open `browser/vader_trooper.user.js`, copy the entire contents, and paste it in
-- Press **Ctrl+S** to save — Tampermonkey will confirm the script is active
-
-**Step 2 — Start the local server**
-
-- Open the terminal in VS Code (`Terminal → New Terminal` from the menu bar)
-- Run this command and leave it running in the background:
-
-```
-python server/relay.py
-```
-
-You should see:
-
-```
-[relay] MOCK MODE — no serial hardware required.
-[ws] Listening on ws://localhost:8765  (Ctrl+C to stop)
-```
-
-**Step 3 — Open the AI playground**
-
-- In Chrome, go to **https://www.shape-models.com/play/tone**
-- Confirm the Tampermonkey icon shows the script as **enabled** on this page (the icon will show a number badge)
-- The VS Code terminal should print `[Vader/Trooper] Relay connected.` within a second or two
-
-**Step 4 — Trigger a response and watch it run**
-
-- On the webpage, type anything into the user message box (or use the default prompt already there)
-- Click the black **Run with this tone** button
-- **Listen** — your computer speakers should start reading the AI's response out loud
-- **Watch the terminal** — you will see a live stream of simulated motor commands like this:
-
-```
-[Vader/Trooper] Stream complete → The Emperor’s will shall be done…
-[MOCK STREAM] Received from Browser: {"channel":0,"angle":100} -> Outbound: S0:100
-[MOCK STREAM] Received from Browser: {"channel":1,"angle":80}  -> Outbound: S1:80
-[MOCK STREAM] Received from Browser: {"channel":0,"angle":80}  -> Outbound: S0:80
-[MOCK STREAM] Received from Browser: {"channel":1,"angle":100} -> Outbound: S1:100
-[MOCK STREAM] Received from Browser: {"channel":4,"angle":135} -> Outbound: S4:135
-[MOCK STREAM] Received from Browser: {"channel":5,"angle":45}  -> Outbound: S5:45
-[telemetry] Turn 1 logged — speaker: vader — chars: 42
-[Vader/Trooper] Stream complete → As you command, Lord Vader…
-[MOCK STREAM] Received from Browser: {"channel":8,"angle":100}  -> Outbound: S8:100
-[MOCK STREAM] Received from Browser: {"channel":9,"angle":80}   -> Outbound: S9:80
-[MOCK STREAM] Received from Browser: {"channel":12,"angle":135} -> Outbound: S12:135
-[MOCK STREAM] Received from Browser: {"channel":13,"angle":45}  -> Outbound: S13:45
-[telemetry] Turn 2 logged — speaker: trooper — chars: 38
-```
-
-Each head bob and arm raise drives an antagonistic pair — one channel winds in while its partner pays out (e.g. Vader’s head nod moves ch 0 and ch 1 in opposite directions). Vader animates on ch 0–7, the Trooper on ch 8–15. Telemetry is written to `server/performance_logs.json` after each turn.
+Before starting the loop, select Groq Llama 3.3 70B from the model dropdown. A guardrail built into the Start Loop button detects a local model and prompts the operator before the loop is allowed to proceed.
 
 ---
 
-## When the Hardware Is Ready
+## The Hardware: 16-Servo Antagonistic Rig (v5.0.0)
 
-### Phase 3 — Wiring and first-power verification
+The physical movement system is hidden beneath the stage deck. Sixteen MG90S metal-gear servos (eight per character) are controlled by an ESP32 microcontroller over I2C through a PCA9685 16-channel PWM board, powered by a dedicated 5V/15A supply. Four aspects of the engineering are worth understanding before building or calibrating the rig.
 
-1. Open `server/relay.py` and change `MOCK_MODE: bool = True` to `MOCK_MODE: bool = False`
-2. The relay auto-detects the ESP32’s COM port — or set `SERIAL_PORT = "COM3"` manually if needed
-3. Power up the 5 V / 3 A wall adapter to the PCA9685 V+ rail **before** plugging in the ESP32
-4. In Chrome, open the HUD **CALIBRATION** panel. Select each channel in the dropdown and click **▶ Test CH** one by one — watch the servo move to confirm the wire is connected to the right channel
-5. Click **⚙ Sweep All Channels** as a final full-wiring check. The relay terminal prints `ch0 → 90°` etc., and the ESP32 echoes `ACK:S0:90` for every command so you can see both ends of the pipeline are working
+**The pull-pull system.** Every degree of freedom on each figure is controlled by a matched pair of servos working in opposition. One servo winds line to pull the joint in one direction while its partner winds the opposing line to pull it back. Because active tension is maintained on both sides at all times, each joint holds its position precisely without any dependence on gravity. There is no sag, no bounce, and no lag on the return stroke. Tendons are 20 lb braided PE fishing line, chosen specifically for zero stretch and zero memory under sustained load.
 
-### Phase 4 — Calibration
+**Non-linear kinematics.** Plastic toy joints are not geometrically perfect circles. As a joint rotates, the effective lever-arm distance changes, which means a simple "servo A to angle X, servo B to 180 minus X" mapping produces binding at the extremes of travel. The userscript corrects for this using a per-joint `CALIBRATION_CURVES` piecewise spline inside `sendJoint()`. Each curve maps a commanded target angle to the specific, independently tuned positions for the pull servo and the payout servo on that joint, calibrated to the actual measured physical geometry.
 
-1. Select a channel in the CALIBRATION dropdown and drag the **Angle** slider slowly toward one extreme until the figure’s joint reaches its physical stop
-2. Note the angle value shown, then click **↓ Set Min** or **↑ Set Max** — the limits display shows the suggested firmware values for that channel
-3. Open `firmware/esp32_servo_controller/esp32_servo_controller.ino`, update `SOFT_MIN_ANGLE[ch]` and `SOFT_MAX_ANGLE[ch]` for the channel, and reflash
-4. Repeat for all 6 channels
-5. Start the autonomous loop and let it run uninterrupted for 10+ minutes to confirm stable operation before any live demonstration
+**Mechanical anchoring.** Tendons run inside 1 mm-ID PTFE (Teflon) Bowden tubes for low-friction routing along the figures' backs. These tubes are not glued. Each tube is anchored by melting small channels through the figures' PVC plastic with a heated needle and then threading 0.5 mm brass wire or micro zip-ties through those channels to lock the tube in place. Adhesive bonds cannot hold under the sustained antagonistic tension loads this rig generates.
+
+**The gantry.** Pulling a figure's arm upward from below the stage deck is geometrically impossible without a high-angle redirection point. A 1/8-inch clear cast acrylic board, cut into a T-shape and mounted behind the figures, provides that point. Because it is optically transparent, it disappears under stage lighting and leaves the figures appearing to move independently.
 
 ---
 
-## Full Technical Reference
-
-For the complete architectural blueprint — wiring diagrams, servo calibration values, the data pipeline spec, and the development roadmap — see **`MASTER_PLAN.md`** in this folder.
+For the full architectural blueprint, wiring diagrams, servo calibration procedures, firmware documentation, and the development roadmap, see `MASTER_PLAN.md`.
