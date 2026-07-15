@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vader & Trooper Master Control Matrix
 // @namespace    robotproject.local
-// @version      5.1.0
+// @version      5.2.0
 // @description  Floating HUD + same-origin hidden iframe matrix for full shape-models.com pipeline control from /play/tone
 // @author       RobotProject
 // @match        https://www.shape-models.com/play/tone
@@ -518,6 +518,31 @@
         syncPersonaField('NAME', personaName);
         injectPersonaModifier(sentiment === 'aggressive' ? PERSONA_MODIFIERS[next] : '');
 
+        // ── Dynamic Tone Dial Profiling ─────────────────────────────
+        // Apply per-character dial profiles so each speaker's generation
+        // parameters and physical servo positions reflect their distinct persona.
+        if (next === 'vader') {
+            dialValues.ENERGY     = 85;
+            dialValues.VERBOSITY  = 75;
+            dialValues.WARMTH     = 20;
+            pushDialToMainPage('ENERGY',    85);
+            pushDialToMainPage('VERBOSITY', 75);
+            pushDialToMainPage('WARMTH',    20);
+            sendJoint(DIAL_JOINT.ENERGY,    toAngle(85, 0, 100));
+            sendJoint(DIAL_JOINT.VERBOSITY, toAngle(75, 0, 100));
+            sendJoint(DIAL_JOINT.WARMTH,    toAngle(20, 0, 100));
+        } else {
+            dialValues.DIRECTNESS   = 80;
+            dialValues.STRUCTURE    = 75;
+            dialValues.WARMTH       = 60;
+            pushDialToMainPage('DIRECTNESS', 80);
+            pushDialToMainPage('STRUCTURE',  75);
+            pushDialToMainPage('WARMTH',     60);
+            sendJoint(DIAL_JOINT.DIRECTNESS, toAngle(80, 0, 100));
+            sendJoint(DIAL_JOINT.STRUCTURE,  toAngle(75, 0, 100));
+            sendJoint(DIAL_JOINT.WARMTH,     toAngle(60, 0, 100));
+        }
+
         // Map hudTurnPause (0-100) → 200–3000 ms with a small random jitter
         const pauseMs = 200 + Math.round((hudTurnPause / 100) * 2800) + Math.floor(Math.random() * 200);
 
@@ -527,13 +552,35 @@
         registerTimeout(() => {
             if (!loopActive || loopPaused) return;
 
+            // ── Rolling Dialogue History Construction ───────────────
+            // Build a 6-turn alternating script block from sessionLog so the
+            // model has explicit conversation context on every turn.
+            const recentTurns = sessionLog.slice(-6);
+            const historyBlock = recentTurns.map(e => {
+                const label = e.speaker === 'vader' ? 'DARTH VADER' : 'STORMTROOPER';
+                return `${label}: "${e.text}"`;
+            }).join('\n');
+
+            // ── Prompt Injection Architecture ───────────────────────
+            // Combine: system directive + 6-turn history + role execution hook.
+            const nextLabel      = next === 'vader' ? 'DARTH VADER' : 'STORMTROOPER';
+            const systemDirective =
+                `[SYSTEM: You are simulating a live sci-fi theatrical debate. ` +
+                `You must strictly play the role of ${nextLabel}. ` +
+                `Speak concisely (1-3 sentences max). ` +
+                `Maintain your character's classic tone. ` +
+                `Do not break character or meta-comment.]`;
+            const fullyFramedPrompt = historyBlock.length > 0
+                ? `${systemDirective}\n\n${historyBlock}\n\n${nextLabel}:`
+                : `${systemDirective}\n\n${nextLabel}:`;
+
             // Find the main page's user message input
             const promptEl = document.querySelector('textarea')
                 || [...document.querySelectorAll('input[type="text"]')]
                     .find(el => /message|prompt|ask/i.test(el.placeholder || ''));
 
             if (promptEl) {
-                setReactValue(promptEl, completedText, window);
+                setReactValue(promptEl, fullyFramedPrompt, window);
             } else {
                 console.warn('[Vader/Trooper] Handoff: prompt input not found.');
             }
@@ -1771,6 +1818,22 @@
                 const staleSec = Math.round((Date.now() - lastTurnTime) / 1000);
                 if (staleSec > 90) updateHudStatus('ws', `\u26a0\ufe0f Loop stalled (${staleSec}s)`, '#f59e0b');
             }, 15000);
+            // ── Execution Seeding ─────────────────────────────────
+            // If the prompt is blank (or nearly so), inject a dramatic opening
+            // scenario so the first generation has full character context.
+            const _seedPromptEl = document.querySelector('textarea')
+                || [...document.querySelectorAll('input[type="text"]')]
+                    .find(el => /message|prompt|ask/i.test(el.placeholder || ''));
+            if (_seedPromptEl && (_seedPromptEl.value || '').trim().length < 5) {
+                const _seed =
+                    '[SYSTEM: Begin the simulation. Darth Vader is confronting an Imperial ' +
+                    'Stormtrooper about a security failure on the Death Star. Keep responses ' +
+                    'brief and highly dramatic.]\n\n' +
+                    'DARTH VADER: "Your incompetence is staggering, soldier. Explain why the ' +
+                    'rebel transmission bypassed your sector."';
+                setReactValue(_seedPromptEl, _seed, window);
+            }
+
             // Kick off by clicking generate immediately
             const runBtn = [...document.querySelectorAll('button')]
                 .find(b => /run|generate|ask/i.test(b.textContent));

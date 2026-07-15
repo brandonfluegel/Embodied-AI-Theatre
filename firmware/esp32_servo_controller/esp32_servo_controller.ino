@@ -1,5 +1,5 @@
 /*
-  esp32_servo_controller.ino  —  v5.1.0
+  esp32_servo_controller.ino  —  v5.2.0
   --------------------------
   Receives servo commands over USB Serial and drives 16 MG90S servos
   through an Adafruit PCA9685 board in a full antagonistic (pull-pull) layout.

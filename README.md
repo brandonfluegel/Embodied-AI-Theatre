@@ -1,4 +1,4 @@
-﻿# Embodied AI Theatre: Darth Vader vs. Stormtrooper (v5.1.0)
+﻿# Embodied AI Theatre: Darth Vader vs. Stormtrooper (v5.2.0 — Multi-Turn Engine & Checksummed Serial)
 
 **A project by Brandon Fluegel, human factors researcher.**
 
@@ -33,6 +33,8 @@ Sixteen MG90S metal-gear servos (eight per character) are driven by an ESP32 ove
 **Browser memory protection.** `sessionLog` is capped at 50 turns via a rolling eviction window — O(1) flat memory regardless of loop duration. Disk NDJSON logging is unaffected.
 
 **Joint trajectory damping.** Commands with a delta > 20° are decomposed into 1° steps across 15 ms windows, preventing impulse loads on the MG90S gears. Incoming overrides abort running transitions immediately.
+
+**State-aware agent loop.** The LLM no longer receives a bare previous-turn string. On every handoff, `scheduleHandoff()` reads the last 6 entries from `sessionLog` and compiles them into a labelled character script (`DARTH VADER: "…"` / `STORMTROOPER: "…"`), prefixed with a `[SYSTEM: …]` directive that names the exact next speaker and suffixed with a role execution hook (e.g. `DARTH VADER:`) that the model completes as that character. Dynamic tone dial profiling applies per-character `dialValues` presets during the inter-turn silence and propagates them to the main page, all iframes, and the physical servos before the next turn begins. On loop start, an execution seed is injected into an empty prompt to ensure deterministic, context-rich generation on turn 1.
 
 ---
 

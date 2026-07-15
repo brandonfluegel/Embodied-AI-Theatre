@@ -1,7 +1,7 @@
 # MASTER PLAN
 ## Darth Vader & Imperial Stormtrooper — Autonomous Physical-Digital AI Theatre
 ### Architectural Blueprint & Source of Truth
-### Current Version: v5.1.0 — Serial Checksum Integrity, Memory Saturation Protection & Trajectory Damping
+### Current Version: v5.2.0 — Multi-Turn Agent Loop, Checksums & Damping
 
 ---
 
@@ -167,13 +167,49 @@ The moment `utterance.onend` fires, `clearInterval` terminates the head loop ins
     ↓  resolveDiffUncertainty() if diff divergence is currently active
     ↓  detectSentiment(completedText) → updateSentimentDisplay()
     ↓  syncPersonaField('NAME', …) + injectPersonaModifier() → /play/persona backstory
+    ↓
+    ↓  ── v5.2.0: Dynamic Tone Dial Profiling ──────────────────────────────────────
+    ↓  During the inter-turn silence, the system actively overwrites the 6 live
+    ↓  dialValues entries to match the upcoming speaker's personality profile:
+    ↓    • Vader next   → ENERGY=85, VERBOSITY=75, WARMTH=20
+    ↓                     (high dominance, high verbosity, cold/menacing)
+    ↓    • Trooper next → DIRECTNESS=80, STRUCTURE=75, WARMTH=60
+    ↓                     (clipped authority, structured, warmer inflection)
+    ↓  Each updated dial is immediately propagated via pushDialToMainPage() to
+    ↓  the native slider on /play/tone and via sendJoint() to the physical servos,
+    ↓  so the figures shift posture during silence rather than mid-speech.
+    ↓
+    ↓  ── v5.2.0: Rolling Dialogue History Construction ─────────────────────────
+    ↓  Instead of injecting the raw completedText, the script reads sessionLog
+    ↓  and slices the last 6 turn objects. Each entry is mapped to a labelled
+    ↓  line using a character script format:
+    ↓      DARTH VADER: "[text]"
+    ↓      STORMTROOPER: "[text]"
+    ↓  A [SYSTEM: …] directive naming the exact next speaker is prepended,
+    ↓  followed by the 6-turn history block, then a trailing role execution hook
+    ↓  (e.g. DARTH VADER:) that the model completes as that character — the
+    ↓  standard few-shot completion pattern. On turn 1 (empty history) the
+    ↓  history block is omitted and only the directive + hook are injected.
+    ↓
     ↓  startNoiseInterval() — Temperature noise resumes during inter-turn gap
     ↓  waits hudTurnPause delay (200–3000 ms, HUD-controlled)
-    ↓  pastes completed text into opposing character's prompt
+    ↓  injects fully-framed prompt (system directive + 6-turn history + role hook)
     ↓  triggers next generation phase
     ↓
 [loop repeats indefinitely]
 ```
+
+> **v5.2.0 — Execution Seeding:** Clicking **♾️ Start Loop** now inspects the main-page prompt textarea before firing the first generate click. If the field is empty or contains fewer than 5 characters, `setReactValue()` injects a default scenario seed:
+>
+> ```
+> [SYSTEM: Begin the simulation. Darth Vader is confronting an Imperial Stormtrooper
+> about a security failure on the Death Star. Keep responses brief and highly dramatic.]
+>
+> DARTH VADER: "Your incompetence is staggering, soldier. Explain why the rebel
+> transmission bypassed your sector."
+> ```
+>
+> This ensures deterministic, context-rich generation on turn 1 regardless of what the operator left in the textarea. If the operator has pre-typed their own scenario (≥ 5 characters), it is left untouched.
 
 ### Stage 4 — Dramatic Refusal Triggers
 
@@ -461,7 +497,7 @@ RobotProject/
 ├── .gitignore
 │
 ├── browser/
-│   └── vader_trooper.user.js           ← v3.4.1 unified matrix userscript
+│   └── vader_trooper.user.js           ← v5.2.0 unified matrix userscript
 │
 ├── server/
 │   ├── relay.py                        ← Python WebSocket server + serial relay
@@ -485,8 +521,8 @@ RobotProject/
 
 ## 10. Development Checklist
 
-> **Status as of 2026-07-15 — v5.1.0. All software complete. Serial checksum integrity enforced end-to-end (`S<ch>:<angle>*<hex>` format, 8-bit XOR). Browser `sessionLog` capped at 50 turns (O(1) flat memory, rolling shift-on-push). `sendJoint()` trajectory damping active: deltas > 20° ramp at 1°/15 ms, abort-on-override. Claude Haiku 4.5 is the mandated model; piecewise spline kinematics active in `sendJoint()`; PWM thermal timeout implemented in firmware; CA glue method fully deprecated. Awaiting physical hardware build (Phase 3).**
-> Digital stack complete with four active dynamic behaviour layers.
+> **Status as of 2026-07-15 — v5.2.0. All software complete. True multi-turn agent loop active: every handoff now injects a [SYSTEM] directive + 6-turn rolling dialogue history + per-speaker role execution hook into the main-page prompt, replacing the raw text feed-forward of earlier versions. Dynamic tone dial profiling applies per-character dial presets (Vader: ENERGY=85/VERBOSITY=75/WARMTH=20; Trooper: DIRECTNESS=80/STRUCTURE=75/WARMTH=60) during inter-turn silence and propagates values to the main page, all iframes, and physical servos simultaneously. Start Loop execution seeding injects a Death Star scenario seed on turn 1 when the prompt is empty. Serial checksum integrity enforced end-to-end (`S<ch>:<angle>*<hex>` format, 8-bit XOR). Browser `sessionLog` capped at 50 turns (O(1) flat memory, rolling shift-on-push). `sendJoint()` trajectory damping active: deltas > 20° ramp at 1°/15 ms, abort-on-override. Claude Haiku 4.5 is the mandated model; piecewise spline kinematics active in `sendJoint()`; PWM thermal timeout implemented in firmware; CA glue method fully deprecated. Awaiting physical hardware build (Phase 3).**
+> Digital stack complete with five active dynamic behaviour layers (v5.2.0 adds state-aware agent loop).
 > Both figures animate independently per speaker. Temperature drives physical noise between turns. Dialogue
 > sentiment automatically modulates the /play/persona backstory. The eval iframe feeds a closed-loop score
 > monitor that adjusts live dial values. The /play/diff iframe triggers physical uncertainty responses.
@@ -532,8 +568,11 @@ RobotProject/
 - [x] Serial checksum integrity — `relay.py` `serial_checksum()` XOR-folds the `<channel>:<angle>` payload into a 2-digit uppercase hex value; all three serial frame builders (`handle_client`, `run_sweep_test`, `run_channel_test`) append `*<checksum>` before `\n`; firmware `processLine()` rejects any frame missing `*` or with a mismatched checksum, discarding silently without calling `moveServo()`
 - [x] Browser memory saturation protection — `sessionLog` array capped at 50 entries via rolling shift-on-push inside `sendTelemetry()`; memory footprint changes from O(N) linear growth to O(1) flat; disk-based NDJSON logging in `relay.py` is unaffected — every turn still persists to `performance_logs.json`
 - [x] Joint trajectory damping engine — `sendJoint()` tracks last commanded angle per pair in `lastJointAngle` Map; any delta > 20° is decomposed into 1° increments dispatched across 15 ms `setTimeout` windows; an incoming override immediately aborts the running transition via `clearTimeout` before starting its own; protects MG90S gear stacks from mechanical fatigue under large dial steps and refusal-posture snap commands
+- [x] Dynamic tone dial profiling on handoff — `scheduleHandoff()` applies per-character `dialValues` presets before the inter-turn pause fires: Vader next → ENERGY=85, VERBOSITY=75, WARMTH=20; Trooper next → DIRECTNESS=80, STRUCTURE=75, WARMTH=60; each updated value is propagated via `pushDialToMainPage()` and `sendJoint()` so the main-page UI, all iframes, and physical servos all reflect the incoming speaker's profile before their turn begins
+- [x] Rolling dialogue history construction — `scheduleHandoff()` replaces bare `completedText` injection with a fully-framed prompt built from `sessionLog.slice(-6)`; turns are mapped to `DARTH VADER: "…"` / `STORMTROOPER: "…"` lines; a `[SYSTEM: …]` directive naming the exact next speaker is prepended and a role execution hook (e.g. `DARTH VADER:`) is appended as a few-shot completion trigger; on turn 1 (empty history) only the directive + hook are injected
+- [x] Execution seeding on loop start — the `vt-loop-start` listener inspects the main-page `textarea` before firing the first generate click; if the field is empty or < 5 characters, `setReactValue()` injects a Death Star security-failure scenario seed to ensure deterministic, context-rich generation on turn 1; pre-typed operator scenarios (≥ 5 characters) are left untouched
 
-> **All software tooling for Phases 3 and 4 is complete (v5.1.0, 2026-07-15).** Serial checksum integrity enforced end-to-end (`S<ch>:<angle>*<hex>` format). Browser `sessionLog` capped at 50 turns for O(1) memory. `sendJoint()` trajectory damping protects gear stacks on all delta > 20° transitions. The firmware has
+> **All software tooling for Phases 3 and 4 is complete (v5.2.0, 2026-07-15).** True multi-turn agent loop: every handoff injects a [SYSTEM] directive + 6-turn rolling history + role execution hook. Dynamic tone dial profiling applies per-character presets during inter-turn silence. Start Loop execution seeding ensures context-rich turn 1. Serial checksum integrity enforced end-to-end (`S<ch>:<angle>*<hex>` format). Browser `sessionLog` capped at 50 turns for O(1) memory. `sendJoint()` trajectory damping protects gear stacks on all delta > 20° transitions. The firmware has
 > per-servo soft limits, echoes `ACK:S<ch>:<angle>` after each command, and cuts PWM after 1500 ms
 > of static hold. `relay.py` has a full sweep, single-channel test, and live serial-ACK reader. The
 > HUD CALIBRATION panel has per-channel slider, ▶ Test CH, ↓ Set Min, ↑ Set Max, and Sweep All.
@@ -561,4 +600,4 @@ RobotProject/
 
 ---
 
-*Last updated: 2026-07-15 — v5.1.0: Serial checksum integrity — 8-bit XOR checksum appended to every serial frame (`S<ch>:<angle>*<hex>\n`); firmware `processLine()` silently discards frames with a missing `*` delimiter or checksum mismatch; browser memory saturation protection — `sessionLog` capped at 50 entries (O(1) flat footprint, rolling shift-on-push); joint trajectory damping engine — `sendJoint()` intercepts deltas > 20° and ramps in 1°/15 ms steps, protecting MG90S gears from impulse fatigue; override commands abort running transitions immediately. v5.0.0 base features: Claude Haiku 4.5 API mandate ("Free (in browser)" / WebGPU model prohibited and guarded at loop start); piecewise spline kinematic calibration in `sendJoint()` via `CALIBRATION_CURVES` (linear 180−angle mapping removed); PTFE tube anchoring migrated from CA glue to heated-needle melt channels + 0.5 mm brass wire / micro zip-ties; ESP32 PWM thermal timeout (1500 ms stall cut, `servoReleased` flag) and constraint logic cleanup (`applied` angle passed directly to `moveServo()`, duplicate `constrain()` removed).*
+*Last updated: 2026-07-15 — v5.2.0: True multi-turn agent loop — `scheduleHandoff()` now builds a fully-framed prompt from `sessionLog.slice(-6)`, mapping entries to `DARTH VADER: "…"` / `STORMTROOPER: "…"` lines prefixed with a `[SYSTEM: …]` directive naming the exact next speaker and suffixed with a role execution hook; replaces bare `completedText` injection. Dynamic tone dial profiling — `scheduleHandoff()` applies per-character `dialValues` presets during the inter-turn silence (Vader: ENERGY=85/VERBOSITY=75/WARMTH=20; Trooper: DIRECTNESS=80/STRUCTURE=75/WARMTH=60) and propagates each value via `pushDialToMainPage()` and `sendJoint()`. Execution seeding — `vt-loop-start` listener injects a Death Star scenario seed when the prompt field is empty on loop start. v5.1.0 features preserved: 8-bit XOR checksum appended to every serial frame (`S<ch>:<angle>*<hex>\n`); firmware `processLine()` silently discards frames with a missing `*` delimiter or checksum mismatch; `sessionLog` capped at 50 entries (O(1) flat footprint, rolling shift-on-push); `sendJoint()` intercepts deltas > 20° and ramps in 1°/15 ms steps, protecting MG90S gears from impulse fatigue; override commands abort running transitions immediately. v5.0.0 base features: Claude Haiku 4.5 API mandate; piecewise spline kinematic calibration in `sendJoint()` via `CALIBRATION_CURVES`; PTFE tube anchoring via heated-needle melt channels + 0.5 mm brass wire / micro zip-ties; ESP32 PWM thermal timeout (1500 ms stall cut, `servoReleased` flag).*
