@@ -1,4 +1,4 @@
-﻿# Embodied AI Theatre: Darth Vader vs. Stormtrooper (v5)
+﻿# Embodied AI Theatre: Darth Vader vs. Stormtrooper (v5.1.0)
 
 **A project by Brandon Fluegel, human factors researcher.**
 

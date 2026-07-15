@@ -1,5 +1,5 @@
 /*
-  esp32_servo_controller.ino  —  v5.0.0
+  esp32_servo_controller.ino  —  v5.1.0
   --------------------------
   Receives servo commands over USB Serial and drives 16 MG90S servos
   through an Adafruit PCA9685 board in a full antagonistic (pull-pull) layout.
@@ -12,8 +12,9 @@
   Each joint is a matched servo pair: one channel winds line in while its
   antagonist pays line out, giving jitter-free positioning with no gravity return.
 
-  Command format (one per line):  S<channel>:<angle>
-  Examples:  S0:120   S8:120   S12:135
+  Command format (one per line):  S<channel>:<angle>*<hex checksum>
+  Examples:  S0:90*03   S8:90*0B   S12:135*0E
+  Frames without '*' or with a checksum mismatch are silently discarded.
 
   Required libraries (install via Arduino Library Manager):
       • Adafruit PWM Servo Driver Library

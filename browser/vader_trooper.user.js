@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vader & Trooper Master Control Matrix
 // @namespace    robotproject.local
-// @version      5.0.0
+// @version      5.1.0
 // @description  Floating HUD + same-origin hidden iframe matrix for full shape-models.com pipeline control from /play/tone
 // @author       RobotProject
 // @match        https://www.shape-models.com/play/tone
@@ -26,22 +26,21 @@
      animation intervals, causing stuttering in the physical syllable sync.
   6. The purple HUD panel will appear on the right side of the page.
 
-  WHAT'S NEW IN v5.0.0
+  WHAT'S NEW IN v5.1.0
   ---------------------
-  - Claude Haiku 4.5 API mandate: "Free (in browser)" / WebGPU model prohibited. Claude
-    Haiku 4.5 is the required model (ultra-low latency, cost-effective for infinite loops,
-    superior theatrical persona retention). A guardrail at Start Loop detects a local
-    model and prompts the operator to switch before proceeding.
-  - Spline kinematic calibration: sendJoint() uses per-joint CALIBRATION_CURVES
-    piecewise linear interpolation to derive pullA and pullB independently,
-    correcting for non-circular joint geometry. Linear 180−angle mapping removed.
-  - Mechanical anchoring: PTFE Bowden tubes secured via heated-needle melt channels
-    and 0.5 mm brass wire / micro zip-ties. CA glue method fully deprecated.
-  - PWM thermal timeout (firmware): ESP32 cuts servo PWM after 1500 ms of static
-    hold to prevent stall-current heating and gear strip. Tendon friction holds the
-    pose; motor stops drawing current. Restored automatically on next move command.
-  - Constraint logic fix (firmware): moveServo() receives the already-clamped
-    applied angle from processLine(); duplicate constrain() call removed.
+  - Serial checksum integrity: every serial frame now carries an 8-bit XOR checksum
+    in the format S<channel>:<angle>*<hex> (e.g. S0:90*03, S12:135*0E). The firmware
+    silently discards any frame missing the '*' delimiter or with a checksum mismatch,
+    preventing corrupted bytes from driving a servo to a wrong position.
+  - Browser memory saturation protection: sessionLog is capped at 50 turns using a
+    rolling O(1) shift-on-push eviction window. Loop duration no longer grows browser
+    memory without bound; disk NDJSON logging via relay.py is unaffected.
+  - Joint trajectory damping: sendJoint() intercepts any angular command whose delta
+    exceeds 20° from the last commanded position, decomposing the step into 1°
+    increments dispatched across 15 ms setTimeout windows. Eliminates
+    instantaneous-acceleration impulse spikes and protects MG90S gear stacks from
+    mechanical fatigue. An incoming override command immediately aborts any running
+    transition before starting its own.
 
   HUD SECTIONS
   ------------
