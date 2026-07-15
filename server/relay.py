@@ -81,6 +81,16 @@ def open_serial(port: str) -> serial.Serial:
     return ser
 
 
+# ── Serial frame helpers ────────────────────────────────────────────
+
+def serial_checksum(payload: str) -> str:
+    """XOR-fold all characters in payload; return 2-digit uppercase hex checksum."""
+    chk = 0
+    for c in payload:
+        chk ^= ord(c)
+    return f"{chk:02X}"
+
+
 # ── Telemetry logging ─────────────────────────────────────────────
 
 def append_telemetry(entry: dict) -> None:
@@ -131,7 +141,8 @@ async def run_sweep_test(
     print("[sweep] Servo sweep test started.")
     for ch in range(16):
         for angle in [90, 130, 90, 50, 90]:
-            line = f"S{ch}:{angle}\n"
+            _payload = f"{ch}:{angle}"
+            line = f"S{_payload}*{serial_checksum(_payload)}\n"
             await write_serial_line(ser, line)
             print(f"[sweep]  ch{ch} \u2192 {angle}\u00b0")
             await asyncio.sleep(0.5)
@@ -152,7 +163,8 @@ async def run_channel_test(
     ch = max(0, min(15, ch))
     print(f"[sweep] Single-channel test: CH{ch}")
     for angle in [90, 130, 90, 50, 90]:
-        line = f"S{ch}:{angle}\n"
+        _payload = f"{ch}:{angle}"
+        line = f"S{_payload}*{serial_checksum(_payload)}\n"
         await write_serial_line(ser, line)
         print(f"[sweep]  ch{ch} \u2192 {angle}\u00b0")
         await asyncio.sleep(0.5)
@@ -300,7 +312,8 @@ async def handle_client(
 
                 angle = max(0, min(180, angle))   # clamp instead of dropping
 
-                line = f"S{channel}:{angle}\n"
+                _payload = f"{channel}:{angle}"
+                line = f"S{_payload}*{serial_checksum(_payload)}\n"
                 try:
                     serial_queue.put_nowait(line)
                 except asyncio.QueueFull:

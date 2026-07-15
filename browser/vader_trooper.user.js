@@ -227,6 +227,10 @@
     let sessionStartTime = 0;            // Date.now() when the loop started
     let tickCount        = 0;            // animation ticks since last rate update
     let tickDisplayTimer = 0;            // last time tick rate was written to HUD
+    // Per-joint last-commanded angle (keyed by pair[0]); used by hardware damping in sendJoint().
+    const lastJointAngle   = new Map();
+    // Per-joint pending step-transition timer ID (keyed by pair[0]); cleared on command override.
+    const activeTransition = new Map();
     // ──────────────────────────────────────────────────────────────
 
     // ── WebSocket ─────────────────────────────────────────────────
@@ -291,17 +295,60 @@
     // Drive an antagonistic joint pair to a target angle using the per-joint
     // CALIBRATION_CURVES piecewise spline. pullA and pullB are interpolated
     // independently to correct for non-circular joint kinematics.
+    // If the step delta exceeds 20°, the movement is decomposed into 1°
+    // increments every 15 ms to prevent instantaneous acceleration spikes.
+    // A new command targeting the same pair immediately aborts any running transition.
     function sendJoint(pair, angle) {
-        const curve = CALIBRATION_CURVES[pair[0]];
-        if (curve) {
-            const { pullA, pullB } = interpolateCurve(curve, angle);
-            sendServo(pair[0], pullA);
-            sendServo(pair[1], pullB);
+        const key    = pair[0];
+        const target = Math.round(Math.max(0, Math.min(180, angle)));
+        const prev   = lastJointAngle.has(key) ? lastJointAngle.get(key) : target;
+        const delta  = Math.abs(target - prev);
+
+        // Abort any running transition for this pair before starting a new one.
+        const pending = activeTransition.get(key);
+        if (pending !== undefined) {
+            clearTimeout(pending);
+            activeTransition.delete(key);
+        }
+
+        // Apply one interpolated frame directly to the servos.
+        function applyAngle(a) {
+            const curve = CALIBRATION_CURVES[pair[0]];
+            if (curve) {
+                const { pullA, pullB } = interpolateCurve(curve, a);
+                sendServo(pair[0], pullA);
+                sendServo(pair[1], pullB);
+            } else {
+                // Fallback for any uncalibrated pair — linear antagonist mapping.
+                const v = Math.round(Math.max(0, Math.min(180, a)));
+                sendServo(pair[0], v);
+                sendServo(pair[1], 180 - v);
+            }
+        }
+
+        if (delta > 20) {
+            // Step-wise damping: advance 1° toward target every 15 ms.
+            const dir = target > prev ? 1 : -1;
+            let current = prev;
+
+            function step() {
+                if (dir > 0 ? current >= target : current <= target) {
+                    lastJointAngle.set(key, target);
+                    activeTransition.delete(key);
+                    applyAngle(target);
+                    return;
+                }
+                current = dir > 0
+                    ? Math.min(current + 1, target)
+                    : Math.max(current - 1, target);
+                applyAngle(current);
+                activeTransition.set(key, setTimeout(step, 15));
+            }
+
+            step();
         } else {
-            // Fallback for any uncalibrated pair — linear antagonist mapping.
-            const a = Math.round(Math.max(0, Math.min(180, angle)));
-            sendServo(pair[0], a);
-            sendServo(pair[1], 180 - a);
+            lastJointAngle.set(key, target);
+            applyAngle(target);
         }
     }
 
@@ -442,6 +489,7 @@
         };
         ws.send(JSON.stringify(entry));
         sessionLog.push(entry);
+        if (sessionLog.length > 50) sessionLog.shift();
         pushToEval();
     }
 

@@ -16,7 +16,7 @@ The background playgrounds each handle a specific job. `/play/persona` receives 
 
 ---
 
-## The Hardware: 16-Servo Antagonistic Rig (v5.0.0)
+## The Hardware: 16-Servo Antagonistic Rig (v5.1.0)
 
 The physical movement system is hidden beneath the stage deck. Sixteen MG90S metal-gear servos (eight per character) are controlled by an ESP32 microcontroller over I2C through a PCA9685 16-channel PWM board, powered by a dedicated 5V/15A supply. Four aspects of the engineering are worth understanding before building or calibrating the rig.
 
@@ -27,6 +27,12 @@ The physical movement system is hidden beneath the stage deck. Sixteen MG90S met
 **Mechanical anchoring.** Tendons run inside 1 mm-ID PTFE (Teflon) Bowden tubes for low-friction routing along the figures' backs. These tubes are not glued. Each tube is anchored by melting small channels through the figures' PVC plastic with a heated needle and then threading 0.5 mm brass wire or micro zip-ties through those channels to lock the tube in place. Adhesive bonds cannot hold under the sustained antagonistic tension loads this rig generates.
 
 **The gantry.** Pulling a figure's arm upward from below the stage deck is geometrically impossible without a high-angle redirection point. A 1/8-inch clear cast acrylic board, cut into a T-shape and mounted behind the figures, provides that point. Because it is optically transparent, it disappears under stage lighting and leaves the figures appearing to move independently.
+
+**Serial frame integrity.** High-frequency motor operations generate inductive electrical noise across the USB serial line. Every command frame now carries an explicit 8-bit XOR checksum appended as a two-digit uppercase hex value: `S<channel>:<angle>*<checksum>\n`. For example, `S0:90*03` commands Vader’s head to neutral and `S12:135*0E` lifts the Stormtrooper’s shoulder. The firmware rejects any frame that is missing the `*` delimiter or whose recomputed checksum does not match, dropping it silently without calling `moveServo()`. The relay builds all checksummed frames automatically.
+
+**Browser memory protection.** The in-memory `sessionLog` array inside the userscript now enforces a rolling circular history window capped at 50 turns. As each new turn is recorded, the oldest entry is evicted if the cap is reached. This changes the runtime memory footprint from O(N) linear growth to O(1) flat, fully eliminating progressive browser page degradation during infinite performances. Disk-based NDJSON logging in `relay.py` is unaffected — every turn still persists to `performance_logs.json`.
+
+**Joint trajectory damping.** The `sendJoint()` calculation matrix now intercepts any angular command whose delta exceeds 20° from the last commanded position for that joint pair. Instead of transmitting the full step as a single frame — which creates an infinite-acceleration impulse load on the MG90S metal gear stack — the transition is decomposed into 1° increments dispatched across discrete 15 ms windows. Structural ringing is suppressed, gear fatigue is eliminated, and any incoming override command immediately aborts the running transition before starting its own.
 
 ---
 

@@ -96,6 +96,22 @@ void moveServo(uint8_t ch, int angle) {
 void processLine(const char* line) {
     if (line[0] != 'S' && line[0] != 's') return;
 
+    // Locate the checksum delimiter.  Frames without '*' are silently discarded.
+    const char* star = strchr(line + 1, '*');
+    if (!star || star[1] == '\0' || star[2] == '\0') return;
+
+    // Compute the running XOR checksum over the payload (chars after 'S', before '*').
+    uint8_t computed = 0;
+    for (const char* p = line + 1; p < star; p++) {
+        computed ^= (uint8_t)(*p);
+    }
+
+    // Parse the two-hex-digit received checksum and compare.
+    char hexBuf[3] = { star[1], star[2], '\0' };
+    uint8_t received = (uint8_t)strtoul(hexBuf, NULL, 16);
+
+    if (computed != received) return;   // checksum mismatch — discard silently
+
     int ch    = -1;
     int angle = -1;
     if (sscanf(line + 1, "%d:%d", &ch, &angle) != 2) return;
