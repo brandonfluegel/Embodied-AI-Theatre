@@ -7,7 +7,7 @@
 
 ## 1. Overall Vision
 
-We are building an autonomous, closed-loop, physical-digital AI theatre that runs on a desktop. The project breaks the glass screen of traditional AI chatbots by giving two digital personas — Darth Vader and an Imperial Stormtrooper — physical forms, voices, and coordinated bodily gestures.
+We are building an autonomous, closed-loop, physical-digital AI theatre that runs on a table. The project gives Darth Vader and an Imperial Stormtrooper physical forms, voices, and coordinated bodily gestures.
 
 The two characters engage in real-time, hands-free spoken debates. The text output of one agent automatically becomes the prompt for the other, creating a self-sustaining conversational loop. The entire pipeline — from language model output, to synthesized speech, to servo-driven physical movement — runs without human intervention once started.
 
