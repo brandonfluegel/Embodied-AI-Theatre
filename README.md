@@ -1,8 +1,8 @@
-﻿# Embodied AI Theatre: Darth Vader vs. Stormtrooper (v5.2.0 — Multi-Turn Engine & Checksummed Serial)
+﻿# Embodied AI Theatre: Darth Vader vs. Stormtrooper
 
 **A project by Brandon Fluegel, human factors researcher.**
 
-This is an autonomous, physical-digital AI theatre that allows Darth Vader and an Imperial Stormtrooper (1/12-scale Hasbro action figures) to hold unscripted spoken debates without any human input once the show starts. Each character has a synthesized voice, a distinct AI persona, and a physical body that moves in coordination with its speech. The loop runs indefinitely: one character speaks, the other listens and then responds, with the physical performance driving the full experience.
+This is an autonomous, physical-digital AI theatre that allows Darth Vader and an Imperial Stormtrooper (1/12-scale Hasbro action figures) to hold unscripted spoken debates without human input. Each character has a synthesized voice, a distinct AI persona, and a physical body that moves in coordination with its speech. The loop runs indefinitely: one character speaks, the other listens and then responds, with both exhibiting dynamic, non-verbal bahavior.
 
 ---
 
