@@ -16,21 +16,21 @@ The background playgrounds each handle a specific job. `/play/persona` receives 
 
 ---
 
-## The Hardware: 16-Servo Antagonistic Rig (v5.3.0)
+## The Hardware: 16-Motor Movement System (v5.3.0)
 
-Eight MG90S metal-gear servos per figure (16 total) are driven by an ESP32 via a PCA9685 PWM board over I2C, powered by a 5 V/15 A rail hidden under the stage.
+Each figure is moved by eight small metal-gear motors, for a total of 16. An ESP32 controller tells the motors when and how far to move. The controller, motor board, and 5 V power supply are hidden under the stage.
 
-**Pull-pull joints.** Each joint uses two opposing servos — one pulls while the other pays out — so joints hold position under load with no sag or return lag. Tendons are 20 lb braided PE fishing line routed through 1 mm PTFE Bowden tubes, anchored to the figures with heated brass wire (adhesive doesn't hold under continuous tension).
+**How the figures move.** Every moving joint has two motors pulling in opposite directions, much like a pair of muscles. One pulls while the other lets out line. This gives the head, body, shoulder, and elbow controlled movement in both directions and helps each pose stay in place.
 
-**Non-linear correction.** Toy joints aren't perfect arcs, so `sendJoint()` uses a per-joint `CALIBRATION_CURVES` spline to map commanded angles to the correct pull/payout positions.
+**Hidden control lines.** Strong fishing line connects the motors to the figures. The line runs through thin, low-friction tubes attached to the back of each figure. These tubes guide the line and keep it from catching as the characters move.
 
-**Gantry.** A T-shaped 1/8" acrylic panel behind the figures redirects shoulder tendons so under-deck servos can raise the arms. It disappears under stage lighting.
+**Raising the arms.** A clear T-shaped support stands behind the figures and guides the shoulder lines from above. This allows motors below the stage to lift the arms naturally. The clear support is designed to disappear under stage lighting.
 
-**Serial integrity.** Commands use the format `S<ch>:<angle>*<hex>` with an 8-bit XOR checksum (e.g. `S0:90*03`). The firmware drops any malformed or mismatched frame silently.
+**Smooth and reliable movement.** Large movements are divided into many small steps to reduce sudden strain on the gears. The controller also checks each incoming instruction and ignores damaged or incomplete commands rather than moving a motor unexpectedly.
 
-**Trajectory damping.** Moves larger than 20° are broken into 1° steps over 15 ms intervals to protect the gears. Incoming commands cancel any in-progress transition immediately.
+**Protection during long conversations.** The system avoids sending the same motor instruction repeatedly, briefly relaxes motors that have been holding still, and starts the motors in pairs instead of powering all 16 at once. These safeguards reduce heat, electrical surges, and unnecessary wear during extended performances.
 
-**Continuous-operation firmware.** The ESP32 suppresses redundant PWM writes without letting repeated rest commands postpone the 1500 ms thermal release. A released channel automatically re-energizes on its next command. At boot, the controller homes one antagonistic pair at a time to reduce current inrush, runs the PCA9685 bus at 400 kHz, and discards timed-out, overflowed, or malformed serial frames. The default 45°–135° per-channel soft limits remain intentionally conservative and must be measured on the assembled tendon rig before wider travel is allowed.
+**Calibration and safety.** The software starts with a limited range of motion for every motor. Each joint must be tested and adjusted on the finished figure before a wider range is allowed. This prevents the motors from pulling too hard on the figure or its control lines.
 
 ---
 
