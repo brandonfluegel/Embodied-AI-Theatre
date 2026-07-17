@@ -9,9 +9,9 @@ ProjectSettings.json
 *.vcxproj.user
 
 # ── VS Code workspace cache ────────────────────────────────────────
-# (keep .vscode/ if you want to share launch/task configs — remove
-#  the line below if you add a .vscode/settings.json you want tracked)
-.vscode/
+# Track the C/C++ configuration required for ESP32 firmware IntelliSense.
+.vscode/*
+!.vscode/c_cpp_properties.json
 
 # ── Python ────────────────────────────────────────────────────────
 __pycache__/
@@ -30,6 +30,7 @@ build/
 .pio/
 .pioenvs/
 .piolibdeps/
+.arduino-build/
 
 # ── Operating system noise ─────────────────────────────────────────
 .DS_Store

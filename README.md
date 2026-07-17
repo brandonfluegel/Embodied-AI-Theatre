@@ -8,7 +8,7 @@ This is an autonomous, physical-digital AI theatre that allows Darth Vader and a
 
 ## The Digital Brain: The shape-models.com Matrix
 
-The show is controlled from a single browser tab. A Tampermonkey userscript (`vader_trooper.user.js`) is injected into the shape-models.com `/play/tone` page, where it builds a hidden iframe matrix that orchestrates six playgrounds simultaneously.
+The show is controlled from a single browser tab. A Tampermonkey userscript (`vader_trooper.user.js`) is injected into the shape-models.com `/play/tone` page, where it builds a hidden iframe matrix that orchestrates six playgrounds simultaneously. Because the tone playground sends only one user message per generation, the userscript owns the conversation state: every request includes the persistent scene premise and up to 20 labelled dialogue turns. Generation is bound to the intended speaker and completes on the site's `Done` state, allowing at least ten turns per character before the rolling context window begins advancing.
 
 The `/play/tone` tab is the master surface. Six tone dials (Warmth, Verbosity, Energy, Directness, Concreteness, Structure) shape the AI text output, the voice synthesis parameters, and the speed of every servo movement at the same time. A floating HUD panel on the right side of the page provides unified control without switching tabs.
 
@@ -16,7 +16,7 @@ The background playgrounds each handle a specific job. `/play/persona` receives 
 
 ---
 
-## The Hardware: 16-Servo Antagonistic Rig (v5.1.0)
+## The Hardware: 16-Servo Antagonistic Rig (v5.3.0)
 
 Eight MG90S metal-gear servos per figure (16 total) are driven by an ESP32 via a PCA9685 PWM board over I2C, powered by a 5 V/15 A rail hidden under the stage.
 
@@ -29,6 +29,8 @@ Eight MG90S metal-gear servos per figure (16 total) are driven by an ESP32 via a
 **Serial integrity.** Commands use the format `S<ch>:<angle>*<hex>` with an 8-bit XOR checksum (e.g. `S0:90*03`). The firmware drops any malformed or mismatched frame silently.
 
 **Trajectory damping.** Moves larger than 20° are broken into 1° steps over 15 ms intervals to protect the gears. Incoming commands cancel any in-progress transition immediately.
+
+**Continuous-operation firmware.** The ESP32 suppresses redundant PWM writes without letting repeated rest commands postpone the 1500 ms thermal release. A released channel automatically re-energizes on its next command. At boot, the controller homes one antagonistic pair at a time to reduce current inrush, runs the PCA9685 bus at 400 kHz, and discards timed-out, overflowed, or malformed serial frames. The default 45°–135° per-channel soft limits remain intentionally conservative and must be measured on the assembled tendon rig before wider travel is allowed.
 
 ---
 

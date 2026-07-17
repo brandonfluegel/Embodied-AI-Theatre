@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vader & Trooper Master Control Matrix
 // @namespace    robotproject.local
-// @version      5.2.0
+// @version      5.3.0
 // @description  Floating HUD + same-origin hidden iframe matrix for full shape-models.com pipeline control from /play/tone
 // @author       RobotProject
 // @match        https://www.shape-models.com/play/tone
@@ -26,21 +26,14 @@
      animation intervals, causing stuttering in the physical syllable sync.
   6. The purple HUD panel will appear on the right side of the page.
 
-  WHAT'S NEW IN v5.1.0
+    WHAT'S NEW IN v5.3.0
   ---------------------
-  - Serial checksum integrity: every serial frame now carries an 8-bit XOR checksum
-    in the format S<channel>:<angle>*<hex> (e.g. S0:90*03, S12:135*0E). The firmware
-    silently discards any frame missing the '*' delimiter or with a checksum mismatch,
-    preventing corrupted bytes from driving a servo to a wrong position.
-  - Browser memory saturation protection: sessionLog is capped at 50 turns using a
-    rolling O(1) shift-on-push eviction window. Loop duration no longer grows browser
-    memory without bound; disk NDJSON logging via relay.py is unaffected.
-  - Joint trajectory damping: sendJoint() intercepts any angular command whose delta
-    exceeds 20° from the last commanded position, decomposing the step into 1°
-    increments dispatched across 15 ms setTimeout windows. Eliminates
-    instantaneous-acceleration impulse spikes and protects MG90S gear stacks from
-    mechanical fatigue. An incoming override command immediately aborts any running
-    transition before starting its own.
+    - Maintains the last 20 turns in every request, supporting at least ten turns per
+        character even though Shape's tone playground is natively single-turn.
+    - Binds each generation to its intended speaker and waits for Shape's Streaming/Done
+        lifecycle; a 2.5 s quiet-window fallback remains for future site changes.
+    - Conversation history now advances without the servo relay connected. TTS errors
+        also complete the text turn instead of stalling the handoff loop.
 
   HUD SECTIONS
   ------------
@@ -60,9 +53,11 @@
     // ── Configuration ─────────────────────────────────────────────
     const WS_URL                 = 'ws://localhost:8765';
     const RECONNECT_MS           = 2000;
-    const STREAM_END_DEBOUNCE_MS = 850;
+    const STREAM_END_FALLBACK_MS = 2500;
     const DIFF_TOGGLE_DEBOUNCE_MS = 2000;
     const IFRAME_READY_DELAY_MS  = 2500;   // ms after iframe load to let React hydrate
+    const MIN_TURNS_PER_CHARACTER = 10;
+    const HISTORY_TURN_LIMIT      = MIN_TURNS_PER_CHARACTER * 2;
 
     // Build iframe URLs from the current tab's origin so the script works on
     // both shape-models.com and www.shape-models.com without cross-origin errors.
@@ -190,7 +185,6 @@
     let panTimer       = null;
 
     let streamDebounce  = null;
-    let lastSpokenText  = '';
     let outputObserver  = null;
     let evalObserver    = null;
     let diffObserver    = null;
@@ -226,6 +220,10 @@
     let sessionStartTime = 0;            // Date.now() when the loop started
     let tickCount        = 0;            // animation ticks since last rate update
     let tickDisplayTimer = 0;            // last time tick rate was written to HUD
+    let generationInFlight = false;      // one Shape request may own the output at a time
+    let generationSpeaker  = null;       // speaker captured when that request was submitted
+    let generationStartedAt = 0;
+    let sessionPremise = '';
     // Per-joint last-commanded angle (keyed by pair[0]); used by hardware damping in sendJoint().
     const lastJointAngle   = new Map();
     // Per-joint pending step-transition timer ID (keyed by pair[0]); cleared on command override.
@@ -464,7 +462,6 @@
 
     // Send a completed-turn record to relay.py so it writes performance_logs.json.
     function sendTelemetry(speaker, text) {
-        if (!wsReady || ws.readyState !== WebSocket.OPEN) return;
         turnCount++;
         lastTurnTime = Date.now();   // watchdog: record time of last completed turn
         // Session timer display
@@ -475,7 +472,11 @@
         }
 
         const counter = document.getElementById('vt-turn-count');
-        if (counter) counter.textContent = turnCount;
+        if (counter) {
+            counter.textContent = turnCount < HISTORY_TURN_LIMIT
+                ? `${turnCount} / ${HISTORY_TURN_LIMIT} min`
+                : String(turnCount);
+        }
 
         const entry = {
             type:        'telemetry',
@@ -486,10 +487,20 @@
             speech_rate: parseFloat((0.75 + (dialValues.ENERGY / 100) * 0.65).toFixed(3)),
             dials:       { ...dialValues },
         };
-        ws.send(JSON.stringify(entry));
+        if (wsReady && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(entry));
+        }
         sessionLog.push(entry);
         if (sessionLog.length > 50) sessionLog.shift();
         pushToEval();
+
+        if (turnCount === HISTORY_TURN_LIMIT) {
+            updateHudStatus(
+                'ws',
+                wsReady ? '10 turns each complete - continuing' : '10 turns each complete - relay offline',
+                wsReady ? '#4ade80' : '#f59e0b'
+            );
+        }
     }
 
     // ── Handoff loop ──────────────────────────────────────────────
@@ -553,26 +564,31 @@
             if (!loopActive || loopPaused) return;
 
             // ── Rolling Dialogue History Construction ───────────────
-            // Build a 6-turn alternating script block from sessionLog so the
-            // model has explicit conversation context on every turn.
-            const recentTurns = sessionLog.slice(-6);
+            // Shape's playground sends one user message per run and has no native
+            // chat history. Carry a full ten-turn exchange per character ourselves.
+            const recentTurns = sessionLog.slice(-HISTORY_TURN_LIMIT);
             const historyBlock = recentTurns.map(e => {
                 const label = e.speaker === 'vader' ? 'DARTH VADER' : 'STORMTROOPER';
-                return `${label}: "${e.text}"`;
+                return `${label}: ${JSON.stringify(e.text)}`;
             }).join('\n');
 
             // ── Prompt Injection Architecture ───────────────────────
-            // Combine: system directive + 6-turn history + role execution hook.
+            // Combine the directive, persistent premise, 20-turn history, and next speaker.
             const nextLabel      = next === 'vader' ? 'DARTH VADER' : 'STORMTROOPER';
             const systemDirective =
                 `[SYSTEM: You are simulating a live sci-fi theatrical debate. ` +
                 `You must strictly play the role of ${nextLabel}. ` +
                 `Speak concisely (1-3 sentences max). ` +
                 `Maintain your character's classic tone. ` +
-                `Do not break character or meta-comment.]`;
-            const fullyFramedPrompt = historyBlock.length > 0
-                ? `${systemDirective}\n\n${historyBlock}\n\n${nextLabel}:`
-                : `${systemDirective}\n\n${nextLabel}:`;
+                `Directly respond to the latest opposing line and advance the same conversation. ` +
+                `Return only spoken dialogue, without a speaker label, stage directions, or meta-commentary.]`;
+            const premiseBlock = sessionPremise
+                ? `[SCENE PREMISE]\n${sessionPremise}\n\n`
+                : '';
+            const fullyFramedPrompt =
+                `${systemDirective}\n\n${premiseBlock}` +
+                `${historyBlock ? `[DIALOGUE SO FAR]\n${historyBlock}\n\n` : ''}` +
+                `[NEXT SPEAKER: ${nextLabel}]`;
 
             // Find the main page's user message input
             const promptEl = document.querySelector('textarea')
@@ -589,6 +605,7 @@
                 .find(b => /run|generate|ask/i.test(b.textContent));
 
             if (runBtn) {
+                beginGeneration(next);
                 fireClick(runBtn, window);
                 console.log(`[Vader/Trooper] Handoff → ${next}, turn ${turnCount + 1}`);
             } else {
@@ -620,7 +637,11 @@
 
     // speaker is 'vader' or 'trooper' — used for telemetry and handoff routing.
     function speakText(text, speaker) {
-        if (!window.speechSynthesis) return;
+        if (!window.speechSynthesis) {
+            sendTelemetry(speaker, text);
+            scheduleHandoff(text, speaker);
+            return;
+        }
         window.speechSynthesis.cancel();
 
         const spk   = speaker || currentSpeaker;
@@ -630,6 +651,16 @@
 
         utt.rate  = 0.75 + (dialValues.ENERGY / 100) * 0.65;
         utt.pitch = 0.85 + (dialValues.WARMTH  / 100) * 0.30;
+        let turnCompleted = false;
+
+        const completeTurn = () => {
+            if (turnCompleted || !loopActive || loopPaused) return;
+            turnCompleted = true;
+            stopAnimation();
+            sendJoint(headJoint(spk), HEAD_CENTER);
+            sendTelemetry(spk, text);
+            scheduleHandoff(text, spk);
+        };
 
         utt.onstart = () => {
             if (!loopActive || loopPaused) return;
@@ -639,18 +670,13 @@
         };
 
         utt.onend = () => {
-            if (!loopActive || loopPaused) return;
-            stopAnimation();
-            sendJoint(headJoint(spk), HEAD_CENTER);   // return active speaker's head to rest
-            sendTelemetry(spk, text);                   // log the completed turn
-            if (loopActive && !loopPaused) {
-                scheduleHandoff(text, spk);             // fire next turn
-            }
+            completeTurn();
         };
 
         utt.onerror = () => {
             stopAnimation();
             sendJoint(headJoint(spk), HEAD_CENTER);
+            completeTurn();
         };
 
         window.speechSynthesis.speak(utt);
@@ -659,37 +685,83 @@
     // ── Output stream monitoring ──────────────────────────────────
 
     function extractOutputText(el) {
-        return (el.textContent || '')
+        const textNode = [...el.querySelectorAll('pre, p, div')]
+            .filter(node => /whitespace-pre-wrap/.test(node.className || ''))
+            .sort((a, b) => (b.textContent || '').length - (a.textContent || '').length)[0];
+        return ((textNode || el).textContent || '')
             .trim()
             .replace(/^OUTPUT\s*/i, '')
             .replace(/^(Llama|GPT|Claude|Gemini|Mistral)[^\n]*\n?/i, '')
-            .replace(/^IDLE\s*/i, '')
+            .replace(/^(IDLE|STREAMING|DONE|ERROR)\s*/i, '')
             .replace(/^Output will stream here\.?\s*/i, '')
             .replace(/^CLEAR OUTPUT\s*/i, '')
             .trim();
     }
 
+    function getOutputStatus(container) {
+        const statusNode = [...container.querySelectorAll('span')]
+            .find(el => /^(Idle|Streaming|Done|Error)$/i.test((el.textContent || '').trim()));
+        return statusNode ? statusNode.textContent.trim().toLowerCase() : '';
+    }
+
+    function beginGeneration(speaker) {
+        if (streamDebounce) clearTimeout(streamDebounce);
+        streamDebounce = null;
+        generationInFlight = true;
+        generationSpeaker = speaker;
+        generationStartedAt = Date.now();
+    }
+
+    function finishGeneration(container) {
+        if (!generationInFlight || !loopActive || loopPaused) return;
+        const final = extractOutputText(container);
+        if (!final || final.length <= 10) return;
+
+        const speaker = generationSpeaker;
+        generationInFlight = false;
+        generationSpeaker = null;
+        console.log('[Vader/Trooper] Stream complete →', final.slice(0, 60) + '…');
+
+        if (isRefusal(final)) {
+            triggerDefensivePosture();
+            return;
+        }
+
+        speakText(final, speaker);
+    }
+
     function onStreamChunk(container) {
-        if (!loopActive || loopPaused) return;
+        if (!loopActive || loopPaused || !generationInFlight) return;
         const text = extractOutputText(container);
+        const status = getOutputStatus(container);
+
+        if (status === 'error') {
+            generationInFlight = false;
+            generationSpeaker = null;
+            loopPaused = true;
+            updateHudStatus('ws', 'Shape generation failed - loop paused', '#f87171');
+            return;
+        }
+
+        if (status === 'done') {
+            if (streamDebounce) clearTimeout(streamDebounce);
+            streamDebounce = setTimeout(() => finishGeneration(container), 50);
+            return;
+        }
+
         if (!text || text.length < 10) return;
 
+        // Compatibility fallback if Shape changes or removes its status badge.
+        // A longer quiet window avoids splitting a slow token stream into turns.
         if (streamDebounce) clearTimeout(streamDebounce);
         streamDebounce = setTimeout(() => {
-            const final = extractOutputText(container);
-            if (!final || final.length <= 10 || final === lastSpokenText) return;
-
-            lastSpokenText = final;
-            console.log('[Vader/Trooper] Stream complete →', final.slice(0, 60) + '…');
-
-            // Check for AI refusal patterns before entering speech pipeline
-            if (isRefusal(final)) {
-                triggerDefensivePosture();
-                return;
+            const runBtn = [...document.querySelectorAll('button')]
+                .find(b => /run with this tone|run|generate|ask/i.test(b.textContent));
+            const oldEnough = Date.now() - generationStartedAt >= STREAM_END_FALLBACK_MS;
+            if (oldEnough && !runBtn?.disabled && getOutputStatus(container) !== 'streaming') {
+                finishGeneration(container);
             }
-
-            speakText(final, currentSpeaker);
-        }, STREAM_END_DEBOUNCE_MS);
+        }, STREAM_END_FALLBACK_MS);
     }
 
     function findOutputSection(doc) {
@@ -1043,6 +1115,8 @@
             panTimer = null;
         }
         stopNoiseInterval();
+        generationInFlight = false;
+        generationSpeaker = null;
     }
 
     // ── Feature 2: Sentiment-Driven Persona Injection ────────────
@@ -1805,6 +1879,11 @@
             loopActive     = true;
             loopPaused     = false;
             currentSpeaker = 'vader';
+            turnCount = 0;
+            sessionLog.length = 0;
+            initOutputMonitoring();
+            const turnCounter = document.getElementById('vt-turn-count');
+            if (turnCounter) turnCounter.textContent = `0 / ${HISTORY_TURN_LIMIT} min`;
             document.getElementById('vt-loop-start').style.display = 'none';
             document.getElementById('vt-loop-stop').style.display  = 'block';
             document.getElementById('vt-speaker-tag').textContent  = 'Darth Vader';
@@ -1819,25 +1898,37 @@
                 if (staleSec > 90) updateHudStatus('ws', `\u26a0\ufe0f Loop stalled (${staleSec}s)`, '#f59e0b');
             }, 15000);
             // ── Execution Seeding ─────────────────────────────────
-            // If the prompt is blank (or nearly so), inject a dramatic opening
-            // scenario so the first generation has full character context.
+            // Capture the operator's text as the persistent scene premise. Shape's
+            // tone playground is single-turn, so every later request includes it.
             const _seedPromptEl = document.querySelector('textarea')
                 || [...document.querySelectorAll('input[type="text"]')]
                     .find(el => /message|prompt|ask/i.test(el.placeholder || ''));
-            if (_seedPromptEl && (_seedPromptEl.value || '').trim().length < 5) {
-                const _seed =
-                    '[SYSTEM: Begin the simulation. Darth Vader is confronting an Imperial ' +
-                    'Stormtrooper about a security failure on the Death Star. Keep responses ' +
-                    'brief and highly dramatic.]\n\n' +
-                    'DARTH VADER: "Your incompetence is staggering, soldier. Explain why the ' +
-                    'rebel transmission bypassed your sector."';
-                setReactValue(_seedPromptEl, _seed, window);
+            const operatorPremise = (_seedPromptEl?.value || '').trim();
+            sessionPremise = operatorPremise.length >= 5
+                ? operatorPremise
+                : 'Darth Vader confronts an Imperial Stormtrooper about a security failure on the Death Star.';
+            const openingPrompt =
+                '[SYSTEM: Play DARTH VADER in a live sci-fi theatrical debate. Open the scene described below. ' +
+                'Speak concisely in 1-3 sentences. Return only spoken dialogue, with no label, stage directions, ' +
+                'or meta-commentary.]\n\n' +
+                `[SCENE PREMISE]\n${sessionPremise}\n\n[NEXT SPEAKER: DARTH VADER]`;
+            if (_seedPromptEl) {
+                setReactValue(_seedPromptEl, openingPrompt, window);
             }
 
-            // Kick off by clicking generate immediately
-            const runBtn = [...document.querySelectorAll('button')]
-                .find(b => /run|generate|ask/i.test(b.textContent));
-            if (runBtn) runBtn.click();
+            // Let an attempted React combobox model change settle before the first run.
+            registerTimeout(() => {
+                if (!loopActive || loopPaused) return;
+                const runBtn = [...document.querySelectorAll('button')]
+                    .find(b => /run|generate|ask/i.test(b.textContent));
+                if (runBtn && !runBtn.disabled) {
+                    beginGeneration('vader');
+                    runBtn.click();
+                } else {
+                    loopActive = false;
+                    updateHudStatus('ws', 'Generate button unavailable', '#f87171');
+                }
+            }, _isHaiku ? 50 : 350);
         });
 
         // "Stop Loop" — halt the loop and return both figures to rest
