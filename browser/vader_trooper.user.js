@@ -378,6 +378,19 @@
         el.dispatchEvent(new (win.Event || Event)('change', { bubbles: true }));
     }
 
+    function getToneUserMessageInput() {
+        const textareas = [...document.querySelectorAll('textarea')];
+        if (textareas.length >= 2) {
+            const briefEl = textareas[0];
+            const userMessageEl = textareas[1];
+            setReactValue(briefEl, '', window);
+            return userMessageEl;
+        }
+        if (textareas.length === 1) return textareas[0];
+        return [...document.querySelectorAll('input[type="text"]')]
+            .find(el => /message|prompt|ask/i.test(el.placeholder || ''));
+    }
+
     function fireClick(el, frameWin) {
         const win = frameWin || window;
         el.dispatchEvent(new win.MouseEvent('click', {
@@ -590,10 +603,8 @@
                 `${historyBlock ? `[DIALOGUE SO FAR]\n${historyBlock}\n\n` : ''}` +
                 `[NEXT SPEAKER: ${nextLabel}]`;
 
-            // Find the main page's user message input
-            const promptEl = document.querySelector('textarea')
-                || [...document.querySelectorAll('input[type="text"]')]
-                    .find(el => /message|prompt|ask/i.test(el.placeholder || ''));
+            // Find the main page's user message input and clear the separate Brief textarea.
+            const promptEl = getToneUserMessageInput();
 
             if (promptEl) {
                 setReactValue(promptEl, fullyFramedPrompt, window);
@@ -1900,9 +1911,7 @@
             // ── Execution Seeding ─────────────────────────────────
             // Capture the operator's text as the persistent scene premise. Shape's
             // tone playground is single-turn, so every later request includes it.
-            const _seedPromptEl = document.querySelector('textarea')
-                || [...document.querySelectorAll('input[type="text"]')]
-                    .find(el => /message|prompt|ask/i.test(el.placeholder || ''));
+            const _seedPromptEl = getToneUserMessageInput();
             const operatorPremise = (_seedPromptEl?.value || '').trim();
             sessionPremise = operatorPremise.length >= 5
                 ? operatorPremise
