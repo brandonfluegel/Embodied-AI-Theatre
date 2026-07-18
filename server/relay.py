@@ -57,15 +57,14 @@ LOGS_PATH: str = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "performance_logs.json"
 )
 
-# Bound the command backlog so a flooded browser cannot grow memory without limit.
-SERIAL_QUEUE_MAXSIZE: int = 256
-
-# Serial output throttle: max one queued servo command every 30 ms (~33 FPS).
+# Serial output throttle: sample the latest requested servo state every 30 ms (~33 FPS).
 SERIAL_WRITE_INTERVAL_SECONDS: float = 0.030
 
-# Last queued angle per servo channel. Used to suppress duplicate commands before
-# they enter the serial queue and overload the ESP32/USB serial buffer.
-last_sent_angle: dict[int, int] = {}
+# Latest requested angle per servo channel, updated by websocket producers.
+target_angles: dict[int, int] = {}
+
+# Last angle actually written to serial per servo channel.
+last_sent_angles: dict[int, int] = {}
 
 # ── Serial helpers ────────────────────────────────────────────────────────────
 
@@ -275,24 +274,26 @@ async def write_serial_line(ser: serial.Serial | None, line: str) -> None:
         print(f"[MOCK STREAM] {line.strip()}")
 
 
-async def serial_writer(ser: serial.Serial | None, queue: asyncio.Queue[str]) -> None:
+async def serial_writer(ser: serial.Serial | None) -> None:
     while True:
-        line = await queue.get()
-        try:
+        await asyncio.sleep(SERIAL_WRITE_INTERVAL_SECONDS)
+        for channel, angle in sorted(target_angles.items()):
+            if last_sent_angles.get(channel) == angle:
+                continue
+
+            _payload = f"{channel}:{angle}"
+            line = f"S{_payload}*{serial_checksum(_payload)}\n"
             if ser:
                 await asyncio.to_thread(ser.write, line.encode("ascii"))
                 print(f"[serial] {line.strip()}")
             else:
-                print(f"[MOCK STREAM] Queued from Browser: {line.strip()}")
-            await asyncio.sleep(SERIAL_WRITE_INTERVAL_SECONDS)
-        finally:
-            queue.task_done()
+                print(f"[MOCK STREAM] Snapshot from Browser: {line.strip()}")
+            last_sent_angles[channel] = angle
 
 
 async def handle_client(
     websocket: websockets.ServerConnection,
     ser: serial.Serial,
-    serial_queue: asyncio.Queue[str],
 ) -> None:
     """
     Accept messages from the Tampermonkey userscript and forward to the ESP32.
@@ -364,16 +365,7 @@ async def handle_client(
                     continue   # only channels 0-15 are wired (16-servo antagonistic layout)
 
                 angle = max(0, min(180, angle))   # clamp instead of dropping
-                if last_sent_angle.get(channel) == angle:
-                    continue
-
-                _payload = f"{channel}:{angle}"
-                line = f"S{_payload}*{serial_checksum(_payload)}\n"
-                try:
-                    serial_queue.put_nowait(line)
-                    last_sent_angle[channel] = angle
-                except asyncio.QueueFull:
-                    print(f"[serial] Dropped command because the outbound queue is full: {line.strip()}")
+                target_angles[channel] = angle
 
     except websockets.exceptions.ConnectionClosedOK:
         pass
@@ -393,17 +385,15 @@ async def main() -> None:
         port_name = SERIAL_PORT or find_serial_port()
         ser = open_serial(port_name)
 
-    serial_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=SERIAL_QUEUE_MAXSIZE)
-
     async def handler(ws: websockets.ServerConnection) -> None:
-        await handle_client(ws, ser, serial_queue)
+        await handle_client(ws, ser)
 
     print(f"[ws] Listening on ws://{WS_HOST}:{WS_PORT}  (Ctrl+C to stop)")
 
     async with websockets.serve(handler, WS_HOST, WS_PORT, compression=None):
         if ser:
             asyncio.create_task(read_serial_acks(ser))   # log ESP32 ACK lines
-        asyncio.create_task(serial_writer(ser, serial_queue))
+        asyncio.create_task(serial_writer(ser))
         await asyncio.Future()
 
 
