@@ -82,6 +82,19 @@
         'Provide a score for each criterion, a brief one-sentence justification, and an overall assessment.\n\n' +
         '--- SESSION TRANSCRIPT ---\n';
 
+    const DEFAULT_SCENE_PREMISE =
+        'Darth Vader interrogates a nervous Imperial Stormtrooper about a security failure aboard the Death Star. ' +
+        'Vader commands and threatens; the Stormtrooper reports, apologizes, and scrambles to obey.';
+
+    const CONVERSATION_RULES = [
+        'This is not an app onboarding task, product welcome, meditation prompt, or customer-support exchange.',
+        'Keep the scene aboard the Death Star or inside the Imperial command structure unless the operator explicitly changes it.',
+        'Darth Vader is the absolute authority: controlled, menacing, disappointed, and commanding.',
+        'The Stormtrooper is a subordinate: nervous, deferential, eager to survive, and never Vader\'s equal, rival, or opponent.',
+        'Each turn must be exactly one spoken sentence, with no speaker label, stage direction, narration, or meta-commentary.',
+        'Do not mention prompts, users, apps, welcomes, onboarding, features, or the Shape playground.',
+    ].join('\n- ');
+
     // Tone dial \u2192 antagonistic joint pair (all 16 channels)
     const JOINTS = {
         VADER_HEAD:       [0, 1],    // nod: 0 pull-down / 1 pull-back
@@ -404,6 +417,14 @@
             .find(el => /message|prompt|ask/i.test(el.placeholder || ''));
     }
 
+    function isUsableScenePremise(text) {
+        const value = (text || '').trim();
+        if (value.length < 12) return false;
+        if (/one-sentence welcome|opened the app|meditation app|onboarding copy|first-time users/i.test(value)) return false;
+        if (/^\[SYSTEM:|\[DIALOGUE SO FAR\]|\[NEXT SPEAKER:/i.test(value)) return false;
+        return true;
+    }
+
     function fireClick(el, frameWin) {
         const win = frameWin || window;
         el.dispatchEvent(new win.MouseEvent('click', {
@@ -606,7 +627,7 @@
             const systemDirective =
                 `[SYSTEM: You are simulating a live sci-fi theatrical exchange. ` +
                 `You must strictly play the role of ${nextLabel}. ` +
-                `Speak concisely in one sentence max. ` +
+                `Follow these rules:\n- ${CONVERSATION_RULES}\n` +
                 roleRelationDirective +
                 `Maintain your character's classic tone. ` +
                 `Directly respond to the latest line and advance the same conversation. ` +
@@ -1873,13 +1894,14 @@
             // tone playground is single-turn, so every later request includes it.
             const _seedPromptEl = getToneUserMessageInput();
             const operatorPremise = (_seedPromptEl?.value || '').trim();
-            sessionPremise = operatorPremise.length >= 5
+            sessionPremise = isUsableScenePremise(operatorPremise)
                 ? operatorPremise
-                : 'Darth Vader confronts an Imperial Stormtrooper about a security failure on the Death Star.';
+                : DEFAULT_SCENE_PREMISE;
             const openingPrompt =
                 '[SYSTEM: Play DARTH VADER in a live sci-fi theatrical exchange. Open the scene described below. ' +
-                'Speak concisely in one sentence max. Return only spoken dialogue, with no label, stage directions, ' +
-                'or meta-commentary.]\n\n' +
+                `Follow these rules:\n- ${CONVERSATION_RULES}\n` +
+                'Begin with Vader addressing the Stormtrooper as a subordinate after a failure. ' +
+                'Return only spoken dialogue, with no label, stage directions, or meta-commentary.]\n\n' +
                 `[SCENE PREMISE]\n${sessionPremise}\n\n[NEXT SPEAKER: DARTH VADER]`;
             if (_seedPromptEl) {
                 setReactValue(_seedPromptEl, openingPrompt, window);
