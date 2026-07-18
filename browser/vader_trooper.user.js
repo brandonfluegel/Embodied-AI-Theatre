@@ -208,7 +208,7 @@
     let loopActive     = false;     // true while the auto-handoff loop is running
     let loopPaused     = false;     // true while held in defensive posture
     let hudBobSpeed    = 50;        // HUD bob-speed slider value (0-100)
-    let hudTurnPause   = 30;        // HUD turn-pause slider value (0-100)
+    let hudTurnPause   = 10;        // HUD turn-pause slider value (0-100)
     const sessionLog   = [];        // in-memory turn records pushed live to /play/eval
     let temperatureValue    = 50;   // Temperature slider normalized 0-100 (noise source)
     let noiseTimer          = null; // setInterval handle for inter-turn servo noise
@@ -579,8 +579,8 @@
             sendJoint(DIAL_JOINT.WARMTH,     toAngle(60, 0, 100));
         }
 
-        // Map hudTurnPause (0-100) → 200–3000 ms with a small random jitter
-        const pauseMs = 200 + Math.round((hudTurnPause / 100) * 2800) + Math.floor(Math.random() * 200);
+        // Map hudTurnPause (0-100) → 80–900 ms with a small random jitter for faster handoffs.
+        const pauseMs = 80 + Math.round((hudTurnPause / 100) * 820) + Math.floor(Math.random() * 80);
 
         // Feature 1: fire temperature noise during inter-turn silence
         startNoiseInterval();
@@ -603,7 +603,7 @@
             const systemDirective =
                 `[SYSTEM: You are simulating a live sci-fi theatrical debate. ` +
                 `You must strictly play the role of ${nextLabel}. ` +
-                `Speak concisely (1-3 sentences max). ` +
+                `Speak concisely in one sentence max. ` +
                 `Maintain your character's classic tone. ` +
                 `Directly respond to the latest opposing line and advance the same conversation. ` +
                 `Return only spoken dialogue, without a speaker label, stage directions, or meta-commentary.]`;
@@ -1538,8 +1538,8 @@
                     </div>
                     <div class="vt-row">
                         <span class="vt-lbl">Turn pause</span>
-                        <input type="range" id="vt-pause" class="vt-slider" min="0" max="100" value="30">
-                        <span id="vt-pause-val" class="vt-num">30</span>
+                        <input type="range" id="vt-pause" class="vt-slider" min="0" max="100" value="10">
+                        <span id="vt-pause-val" class="vt-num">10</span>
                     </div>
                 </div>
 
@@ -1749,7 +1749,7 @@
             });
         }
 
-        // Turn-pause slider — controls the dead air between spoken turns (200–3000 ms)
+        // Turn-pause slider — controls the dead air between spoken turns (80–900 ms)
         const pauseSlider = document.getElementById('vt-pause');
         const pauseLabel  = document.getElementById('vt-pause-val');
         if (pauseSlider) {
@@ -1874,7 +1874,7 @@
                 : 'Darth Vader confronts an Imperial Stormtrooper about a security failure on the Death Star.';
             const openingPrompt =
                 '[SYSTEM: Play DARTH VADER in a live sci-fi theatrical debate. Open the scene described below. ' +
-                'Speak concisely in 1-3 sentences. Return only spoken dialogue, with no label, stage directions, ' +
+                'Speak concisely in one sentence max. Return only spoken dialogue, with no label, stage directions, ' +
                 'or meta-commentary.]\n\n' +
                 `[SCENE PREMISE]\n${sessionPremise}\n\n[NEXT SPEAKER: DARTH VADER]`;
             if (_seedPromptEl) {
