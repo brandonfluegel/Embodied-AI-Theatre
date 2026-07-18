@@ -50,7 +50,7 @@ pygame.mixer.init()
 tts_client = ElevenLabs(api_key=os.environ.get("ELEVENLABS_API_KEY"))
 
 VOICE_IDS = {
-    "vader": "VADER_VOICE_ID_HERE",
+    "vader": "8eDnLPqyDnB7bUYpp3V0",
     "trooper": "TROOPER_VOICE_ID_HERE",
     "stormtrooper": "TROOPER_VOICE_ID_HERE",
 }
