@@ -250,6 +250,19 @@
             try {
                 const msg = JSON.parse(event.data);
                 if      (msg.type === 'replay_data')          handleReplayData(msg.entries || []);
+                else if (msg.type === 'tts_started')          {
+                    if (!loopActive || loopPaused) return;
+                    stopNoiseInterval();
+                    startAnimation();
+                    scheduleArmGesture(msg.text, msg.speaker);
+                }
+                else if (msg.type === 'tts_complete')         {
+                    if (!loopActive || loopPaused) return;
+                    stopAnimation();
+                    sendJoint(headJoint(msg.speaker), HEAD_CENTER);
+                    sendTelemetry(msg.speaker, msg.text);
+                    scheduleHandoff(msg.text, msg.speaker);
+                }
                 else if (msg.type === 'sweep_complete')       {
                     const el = document.getElementById('vt-cal-status');
                     if (el) el.textContent = 'Sweep complete \u2713';
@@ -459,7 +472,6 @@
     // Vader bows his head (VADER_HEAD nod → 60°); the Trooper snaps to a defensive
     // stance (TROOPER_HEAD → 120°). Both joints hold via antagonistic tension.
     function triggerDefensivePosture() {
-        window.speechSynthesis.cancel();
         stopAnimation();
         stopNoiseInterval();   // Feature 1: silence noise on defensive posture
         sendJoint(JOINTS.VADER_HEAD, 60);
@@ -625,72 +637,17 @@
         }, pauseMs);
     }
 
-    // ── Web Speech synthesis ──────────────────────────────────────
-
-    function pickVoice(speaker) {
-        const voices = window.speechSynthesis.getVoices();
-        if (speaker === 'vader') {
-            // Prefer a deep male voice for Darth Vader
-            return voices.find(v => v.lang === 'en-US' && /david|mark|guy|james/i.test(v.name) && v.localService)
-                || voices.find(v => v.lang === 'en-US' && /david|mark|guy|james/i.test(v.name))
-                || voices.find(v => v.lang === 'en-US' && v.localService)
-                || voices.find(v => v.lang === 'en-US')
-                || voices[0] || null;
-        } else {
-            // Prefer a sharper, clipped voice for the Stormtrooper — avoid Vader's voice
-            return voices.find(v => v.lang === 'en-US' && /zira|hazel|linda|aria|jenny/i.test(v.name) && v.localService)
-                || voices.find(v => v.lang === 'en-US' && !/david|mark|guy|james/i.test(v.name) && v.localService)
-                || voices.find(v => v.lang === 'en-US' && !/david|mark|guy|james/i.test(v.name))
-                || voices.find(v => v.lang === 'en-US')
-                || voices[0] || null;
-        }
-    }
+    // ── Relay-backed Text-to-Speech ──────────────────────────────
 
     // speaker is 'vader' or 'trooper' — used for telemetry and handoff routing.
     function speakText(text, speaker) {
-        if (!window.speechSynthesis) {
-            sendTelemetry(speaker, text);
-            scheduleHandoff(text, speaker);
+        const spk = speaker || currentSpeaker;
+        if (wsReady && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'tts_request', speaker: spk, text: text }));
             return;
         }
-        window.speechSynthesis.cancel();
-
-        const spk   = speaker || currentSpeaker;
-        const utt   = new SpeechSynthesisUtterance(text);
-        const voice = pickVoice(spk);
-        if (voice) utt.voice = voice;
-
-        utt.rate  = 0.75 + (dialValues.ENERGY / 100) * 0.65;
-        utt.pitch = 0.85 + (dialValues.WARMTH  / 100) * 0.30;
-        let turnCompleted = false;
-
-        const completeTurn = () => {
-            if (turnCompleted || !loopActive || loopPaused) return;
-            turnCompleted = true;
-            stopAnimation();
-            sendJoint(headJoint(spk), HEAD_CENTER);
-            sendTelemetry(spk, text);
-            scheduleHandoff(text, spk);
-        };
-
-        utt.onstart = () => {
-            if (!loopActive || loopPaused) return;
-            stopNoiseInterval();   // Feature 1: silence inter-turn noise during speech
-            startAnimation();
-            scheduleArmGesture(text, spk);
-        };
-
-        utt.onend = () => {
-            completeTurn();
-        };
-
-        utt.onerror = () => {
-            stopAnimation();
-            sendJoint(headJoint(spk), HEAD_CENTER);
-            completeTurn();
-        };
-
-        window.speechSynthesis.speak(utt);
+        sendTelemetry(spk, text);
+        scheduleHandoff(text, spk);
     }
 
     // ── Output stream monitoring ──────────────────────────────────
@@ -1119,7 +1076,6 @@
             diffDebounce = null;
         }
         cleanupObservers();
-        window.speechSynthesis.cancel();
         stopAnimation();
         if (panTimer) {
             clearInterval(panTimer);
@@ -2041,13 +1997,6 @@
     }
 
     // ── Boot ──────────────────────────────────────────────────────
-
-    // Chrome loads speech voices asynchronously — pre-trigger so they are
-    // available by the time the first utterance fires.
-    if (window.speechSynthesis) {
-        window.speechSynthesis.getVoices();
-        window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
-    }
 
     connect();
     buildHUD();

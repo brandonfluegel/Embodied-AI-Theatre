@@ -17,12 +17,15 @@ Run:
 """
 
 import asyncio
+import io
 import json
 import os
+import pygame
 import serial
 import serial.tools.list_ports
 import websockets
 from datetime import datetime, timezone
+from openai import AsyncOpenAI
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
@@ -40,6 +43,9 @@ BAUD_RATE: int = 115200
 # The WebSocket server will listen on this host and port.
 WS_HOST: str = "localhost"
 WS_PORT: int = 8765
+
+pygame.mixer.init()
+aclient = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 # Path to the telemetry log file written by append_telemetry().
 # Uses newline-delimited JSON so new entries can be appended without
@@ -201,6 +207,35 @@ async def send_replay(websocket: websockets.ServerConnection) -> None:
     print(f"[replay] Sent {len(entries)} entr{'y' if len(entries) == 1 else 'ies'} to browser.")
 
 
+async def play_high_res_audio(
+    websocket: websockets.ServerConnection,
+    speaker: str,
+    text: str,
+) -> None:
+    try:
+        voice = "onyx" if speaker == "vader" else "echo"
+        response = await aclient.audio.speech.create(
+            model="tts-1",
+            voice=voice,
+            input=text,
+        )
+        audio_data = io.BytesIO(response.content)
+        audio_data.seek(0)
+
+        await websocket.send(json.dumps({"type": "tts_started", "speaker": speaker, "text": text}))
+        pygame.mixer.music.load(audio_data)
+        pygame.mixer.music.play()
+        while pygame.mixer.music.get_busy():
+            await asyncio.sleep(0.05)
+        await websocket.send(json.dumps({"type": "tts_complete", "speaker": speaker, "text": text}))
+    except Exception as exc:
+        print(f"[tts] Error for speaker={speaker}: {exc}")
+        try:
+            await websocket.send(json.dumps({"type": "tts_complete", "speaker": speaker, "text": text}))
+        except Exception:
+            pass
+
+
 async def read_serial_acks(ser: serial.Serial) -> None:
     """
     Background task: reads ACK lines sent back by the ESP32 and logs them.
@@ -274,6 +309,14 @@ async def handle_client(
             # Replay request: read performance_logs.json and send all entries back to the browser.
             if isinstance(payload, dict) and payload.get("type") == "replay_request":
                 await send_replay(websocket)
+                continue
+
+            # TTS request: synthesize and play audio without blocking servo commands.
+            if isinstance(payload, dict) and payload.get("type") == "tts_request":
+                speaker = str(payload.get("speaker", "vader"))
+                text = str(payload.get("text", ""))
+                if text:
+                    asyncio.create_task(play_high_res_audio(websocket, speaker, text))
                 continue
 
             # Eval feedback: browser reports that the session score dropped below threshold
