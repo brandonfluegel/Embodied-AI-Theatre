@@ -50,9 +50,9 @@ pygame.mixer.init()
 tts_client = ElevenLabs(api_key=os.environ.get("ELEVENLABS_API_KEY"))
 
 VOICE_IDS = {
-    "vader": "8eDnLPqyDnB7bUYpp3V0",
-    "trooper": "TROOPER_VOICE_ID_HERE",
-    "stormtrooper": "TROOPER_VOICE_ID_HERE",
+    "vader": "ANimV6aIZ2PFElR05XSg",
+    "trooper": "BzQFLnZOFDFNimMoX3gj",
+    "stormtrooper": "BzQFLnZOFDFNimMoX3gj",
 }
 
 # Path to the telemetry log file written by append_telemetry().
