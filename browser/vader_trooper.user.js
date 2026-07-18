@@ -600,12 +600,16 @@
             // ── Prompt Injection Architecture ───────────────────────
             // Combine the directive, persistent premise, 20-turn history, and next speaker.
             const nextLabel      = next === 'vader' ? 'DARTH VADER' : 'STORMTROOPER';
+            const roleRelationDirective = next === 'trooper'
+                ? `The Stormtrooper must always speak with subtle fear and deference toward Darth Vader; he must never treat himself as Vader's equal, rival, or opponent. `
+                : '';
             const systemDirective =
-                `[SYSTEM: You are simulating a live sci-fi theatrical debate. ` +
+                `[SYSTEM: You are simulating a live sci-fi theatrical exchange. ` +
                 `You must strictly play the role of ${nextLabel}. ` +
                 `Speak concisely in one sentence max. ` +
+                roleRelationDirective +
                 `Maintain your character's classic tone. ` +
-                `Directly respond to the latest opposing line and advance the same conversation. ` +
+                `Directly respond to the latest line and advance the same conversation. ` +
                 `Return only spoken dialogue, without a speaker label, stage directions, or meta-commentary.]`;
             const premiseBlock = sessionPremise
                 ? `[SCENE PREMISE]\n${sessionPremise}\n\n`
@@ -1873,7 +1877,7 @@
                 ? operatorPremise
                 : 'Darth Vader confronts an Imperial Stormtrooper about a security failure on the Death Star.';
             const openingPrompt =
-                '[SYSTEM: Play DARTH VADER in a live sci-fi theatrical debate. Open the scene described below. ' +
+                '[SYSTEM: Play DARTH VADER in a live sci-fi theatrical exchange. Open the scene described below. ' +
                 'Speak concisely in one sentence max. Return only spoken dialogue, with no label, stage directions, ' +
                 'or meta-commentary.]\n\n' +
                 `[SCENE PREMISE]\n${sessionPremise}\n\n[NEXT SPEAKER: DARTH VADER]`;
