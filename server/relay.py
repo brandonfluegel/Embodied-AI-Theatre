@@ -24,6 +24,8 @@ import pygame
 import serial
 import serial.tools.list_ports
 import websockets
+from dotenv import load_dotenv
+load_dotenv()
 from datetime import datetime, timezone
 from openai import AsyncOpenAI
 
