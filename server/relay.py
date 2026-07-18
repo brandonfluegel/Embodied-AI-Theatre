@@ -60,6 +60,13 @@ LOGS_PATH: str = os.path.join(
 # Bound the command backlog so a flooded browser cannot grow memory without limit.
 SERIAL_QUEUE_MAXSIZE: int = 256
 
+# Serial output throttle: max one queued servo command every 30 ms (~33 FPS).
+SERIAL_WRITE_INTERVAL_SECONDS: float = 0.030
+
+# Last queued angle per servo channel. Used to suppress duplicate commands before
+# they enter the serial queue and overload the ESP32/USB serial buffer.
+last_sent_angle: dict[int, int] = {}
+
 # ── Serial helpers ────────────────────────────────────────────────────────────
 
 def find_serial_port() -> str:
@@ -277,6 +284,7 @@ async def serial_writer(ser: serial.Serial | None, queue: asyncio.Queue[str]) ->
                 print(f"[serial] {line.strip()}")
             else:
                 print(f"[MOCK STREAM] Queued from Browser: {line.strip()}")
+            await asyncio.sleep(SERIAL_WRITE_INTERVAL_SECONDS)
         finally:
             queue.task_done()
 
@@ -356,11 +364,14 @@ async def handle_client(
                     continue   # only channels 0-15 are wired (16-servo antagonistic layout)
 
                 angle = max(0, min(180, angle))   # clamp instead of dropping
+                if last_sent_angle.get(channel) == angle:
+                    continue
 
                 _payload = f"{channel}:{angle}"
                 line = f"S{_payload}*{serial_checksum(_payload)}\n"
                 try:
                     serial_queue.put_nowait(line)
+                    last_sent_angle[channel] = angle
                 except asyncio.QueueFull:
                     print(f"[serial] Dropped command because the outbound queue is full: {line.strip()}")
 
