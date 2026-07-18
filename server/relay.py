@@ -10,7 +10,7 @@ Antagonistic 16-servo layout (pull-pull pairs):
   Stormtrooper  ch 8-15: head nod (8/9) | torso twist (10/11) | shoulder (12/13) | elbow (14/15)
 
 Install once:
-    pip install websockets pyserial
+    pip install websockets pyserial pygame python-dotenv elevenlabs
 
 Run:
     python relay.py
@@ -27,7 +27,7 @@ import websockets
 from dotenv import load_dotenv
 load_dotenv()
 from datetime import datetime, timezone
-from openai import AsyncOpenAI
+from elevenlabs.client import ElevenLabs
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
@@ -47,7 +47,13 @@ WS_HOST: str = "localhost"
 WS_PORT: int = 8765
 
 pygame.mixer.init()
-aclient = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+tts_client = ElevenLabs(api_key=os.environ.get("ELEVENLABS_API_KEY"))
+
+VOICE_IDS = {
+    "vader": "VADER_VOICE_ID_HERE",
+    "trooper": "TROOPER_VOICE_ID_HERE",
+    "stormtrooper": "TROOPER_VOICE_ID_HERE",
+}
 
 # Path to the telemetry log file written by append_telemetry().
 # Uses newline-delimited JSON so new entries can be appended without
@@ -221,13 +227,17 @@ async def play_high_res_audio(
     text: str,
 ) -> None:
     try:
-        voice = "onyx" if speaker == "vader" else "echo"
-        response = await aclient.audio.speech.create(
-            model="tts-1",
-            voice=voice,
-            input=text,
-        )
-        audio_data = io.BytesIO(response.content)
+        voice_id = VOICE_IDS.get(speaker, VOICE_IDS["trooper"])
+
+        def generate_audio_bytes() -> bytes:
+            audio_stream = tts_client.text_to_speech.convert(
+                voice_id=voice_id,
+                text=text,
+                model_id="eleven_multilingual_v2",
+            )
+            return b"".join(audio_stream)
+
+        audio_data = io.BytesIO(await asyncio.to_thread(generate_audio_bytes))
         audio_data.seek(0)
 
         await websocket.send(json.dumps({"type": "tts_started", "speaker": speaker, "text": text}))
