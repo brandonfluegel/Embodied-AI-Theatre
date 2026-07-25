@@ -40,7 +40,8 @@
 #include <ctype.h>
 
 // ── PCA9685 instance (default I²C address 0x40) ──────────────────
-Adafruit_PWMServoDriver pca = Adafruit_PWMServoDriver(0x40);
+static const uint8_t PCA9685_ADDRESS = 0x40;
+Adafruit_PWMServoDriver pca = Adafruit_PWMServoDriver(PCA9685_ADDRESS);
 
 // ── Servo pulse calibration ───────────────────────────────────────
 // These values work for most 9g / standard hobby servos. The per-channel soft
@@ -53,14 +54,18 @@ static const uint16_t SERVO_MIN   = 150;   // pulse count for   0°
 static const uint16_t SERVO_MAX   = 600;   // pulse count for 180°
 static const uint8_t  PWM_FREQ_HZ = 50;    // standard servo frequency
 static const uint32_t I2C_CLOCK_HZ = 400000;
+static const uint32_t PCA_HEALTH_CHECK_MS = 5000;
+static bool           pcaAvailable = false;
+static uint32_t       lastPcaHealthCheck = 0;
 
 // ── Serial input buffer ───────────────────────────────────────────
 static const uint8_t  NUM_SERVOS             = 16;
 static const int      HOME_ANGLE[NUM_SERVOS] = {90, 90, 90, 90, 90, 90, 90, 90,
                                                 90, 90, 90, 90, 90, 90, 90, 90};
 
-// Per-servo soft angle limits — tune these during Phase 4 calibration to match
-// the physical stop points of each figure and prevent antagonistic over-pull.
+// Per-servo soft angle limits — these are commissioning defaults, not measured
+// mechanical limits. Tune all entries during Phase 4 calibration to match the
+// physical stop points of each installed figure and prevent antagonistic over-pull.
 // Every channel is now a tendon winder in a pull-pull pair; keep the window
 // conservative until each joint's travel is measured by hand.
 // Edit SOFT_MIN / SOFT_MAX, then use the HUD Calibration panel to verify.
@@ -99,7 +104,21 @@ uint16_t angleToPulse(int angle) {
     return (uint16_t)map(angle, 0, 180, SERVO_MIN, SERVO_MAX);
 }
 
+bool isPca9685Present() {
+    Wire.beginTransmission(PCA9685_ADDRESS);
+    return Wire.endTransmission() == 0;
+}
+
+void initializePca9685() {
+    pca.begin();
+    pca.setOscillatorFrequency(27000000);
+    pca.setPWMFreq(PWM_FREQ_HZ);
+    pcaAvailable = true;
+}
+
 bool moveServo(uint8_t ch, int angle) {
+    if (!pcaAvailable) return false;
+
     // Repeated rest commands must not keep resetting the thermal timer. If PWM
     // has already been released, the same command intentionally re-energises it.
     if (!servoReleased[ch] && lastAppliedAngle[ch] == angle) return false;
@@ -144,13 +163,17 @@ void processLine(const char* line) {
 
     int raw     = constrain(angle, 0, 180);
     int applied = constrain(raw, SOFT_MIN_ANGLE[ch], SOFT_MAX_ANGLE[ch]);
-    moveServo((uint8_t)ch, applied);
-    // Echo the effective (soft-clamped) angle back over serial.
-    // relay.py logs these as [ESP32] ACK:S<ch>:<angle> to confirm live wiring.
+    if (!pcaAvailable) {
+        Serial.println("ERROR:PCA9685_UNAVAILABLE");
+        return;
+    }
+    bool moved = moveServo((uint8_t)ch, applied);
+    // Echoes confirm frame handling and PWM update state, not physical motion.
     Serial.print("ACK:S");
     Serial.print(ch);
     Serial.print(":");
-    Serial.println(applied);
+    Serial.print(applied);
+    Serial.println(moved ? ":APPLIED" : ":UNCHANGED");
 }
 
 // ── Arduino lifecycle ─────────────────────────────────────────────
@@ -158,10 +181,13 @@ void processLine(const char* line) {
 void setup() {
     Serial.begin(115200);
 
-    pca.begin();
+    Wire.begin(21, 22);
     Wire.setClock(I2C_CLOCK_HZ);
-    pca.setOscillatorFrequency(27000000);
-    pca.setPWMFreq(PWM_FREQ_HZ);
+    if (isPca9685Present()) {
+        initializePca9685();
+    } else {
+        Serial.println("ERROR:PCA9685_NOT_FOUND");
+    }
     delay(10);
 
     for (uint8_t ch = 0; ch < NUM_SERVOS; ch++) {
@@ -169,15 +195,31 @@ void setup() {
         servoReleased[ch] = true;
     }
 
-    // Energise one antagonistic pair at a time. Both sides of a joint engage
-    // together, while the stagger avoids the inrush of starting all 16 servos.
-    for (uint8_t first = 0; first < NUM_SERVOS; first += 2) {
-        moveServo(first, HOME_ANGLE[first]);
-        moveServo(first + 1, HOME_ANGLE[first + 1]);
-        delay(80);
+    if (pcaAvailable) {
+        // Energise one antagonistic pair at a time. Both sides of a joint engage
+        // together, while the stagger avoids the inrush of starting all 16 servos.
+        for (uint8_t first = 0; first < NUM_SERVOS; first += 2) {
+            moveServo(first, HOME_ANGLE[first]);
+            moveServo(first + 1, HOME_ANGLE[first + 1]);
+            delay(80);
+        }
     }
 
     Serial.println("READY");
+}
+
+void servicePcaHealth(uint32_t now) {
+    if ((now - lastPcaHealthCheck) < PCA_HEALTH_CHECK_MS) return;
+    lastPcaHealthCheck = now;
+
+    bool present = isPca9685Present();
+    if (!present && pcaAvailable) {
+        pcaAvailable = false;
+        Serial.println("ERROR:PCA9685_LOST");
+    } else if (present && !pcaAvailable) {
+        initializePca9685();
+        Serial.println("PCA9685_RESTORED");
+    }
 }
 
 void serviceThermalProtection(uint32_t now) {
@@ -224,6 +266,7 @@ void serviceSerial(uint32_t now) {
 
 void loop() {
     const uint32_t now = millis();
+    servicePcaHealth(now);
     serviceThermalProtection(now);
     serviceSerial(now);
 }

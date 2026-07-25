@@ -1,7 +1,7 @@
 # MASTER PLAN
 ## Darth Vader & Imperial Stormtrooper — Autonomous Physical-Digital AI Theatre
 ### Architectural Blueprint & Source of Truth
-### Current Version: v5.3.0 — Reliable 20-Turn Conversation Loop
+### Current Version: v5.4.0 — Enclosed Stage Commissioning Controls
 
 ---
 
@@ -117,18 +117,11 @@ The userscript does not track mouse clicks or raw slider positions to trigger sp
 
 Each submitted generation captures its intended speaker. The observer waits for the output card to move from `Streaming` to `Done`, then extracts the final text and routes it to that captured speaker. A conservative 2.5-second quiet-window fallback is used only if the site removes its status badge. This prevents a slow stream pause from becoming a false extra turn.
 
-### Stage 2 — Web Speech Text-to-Speech
+### Stage 2 — Relay-Backed Text-to-Speech
 
-The cleaned text string is immediately handed to the browser's native `window.speechSynthesis` API — no external service, no API key, no network round-trip. A dedicated US-English voice is selected per character. Darth Vader targets deep male voices (David, Mark, Guy, James on Windows); the Stormtrooper targets sharper voices (Zira, Hazel, Aria, Jenny) and actively avoids Vader's voice set. Both fall through gracefully to any available en-US voice if the preferred names are not installed on the host OS.
+The userscript sends each completed text block to `relay.py` as a `tts_request`. The relay uses ElevenLabs to synthesize the selected character voice and plays it through the host computer with `pygame`. This requires a valid `ELEVENLABS_API_KEY`, network access, and a working host audio device. The relay emits `tts_started` and `tts_complete`; the userscript begins physical animation only after `tts_started` and schedules the next turn only after `tts_complete`.
 
-Two dial parameters shape the utterance in real time before each sentence is spoken:
-
-| Dial | Voice effect | Range |
-|---|---|---|
-| ENERGY | Speech rate | 0.75 (slow) → 1.40 (rapid) |
-| WARMTH | Pitch | 0.85 (low) → 1.15 (warm) |
-
-The interaction operates as a **closed-loop automated theatre**. When the active utterance fires its `onend` event, the userscript copies the completed text block, programmatically inputs it into the opposing character's prompt window, and triggers the next generation phase. The debate alternates between Darth Vader and the Imperial Stormtrooper indefinitely without any manual user action.
+The interaction operates as a **closed-loop automated theatre**. When relay playback completes, the userscript copies the completed text block, programmatically inputs it into the opposing character's prompt window, and triggers the next generation phase. The debate alternates between Darth Vader and the Imperial Stormtrooper indefinitely without manual input.
 
 ### Stage 3 — Syllable-Synchronized Mechanical Bursts
 
@@ -156,11 +149,11 @@ The moment `utterance.onend` fires, `clearInterval` terminates the head loop ins
     ↓  Shape output status changes from Streaming to Done
     ↓  text stripped of UI labels
     ↓
-[window.speechSynthesis.speak(utterance) — character-specific voice selected]
-    ↓  utterance.onstart  → stopNoiseInterval() — Temperature noise silenced
+[relay.py plays ElevenLabs audio — character-specific voice selected]
+    ↓  tts_started  → stopNoiseInterval() — Temperature noise silenced
     ↓                     → head-bob loop starts on active speaker's head nod pair (ch 0/1 Vader | ch 8/9 Trooper)
     ↓                     → arm gesture scheduled at ~40% through utterance (shoulder pair ch 4/5 Vader | ch 12/13 Trooper → 135° for 700 ms)
-    ↓  utterance.onend   → loop cleared, speaker head → S<ch>:90, entry pushed to sessionLog
+    ↓  tts_complete      → loop cleared, speaker head → S<ch>:90, entry pushed to sessionLog
     ↓                     → pushToEval() writes live transcript + scoring criteria to /play/eval
     ↓
 [scheduleHandoff]
@@ -206,7 +199,7 @@ The moment `utterance.onend` fires, `clearInterval` terminates the head loop ins
 
 The /play/refusal playground lets you define boundary phrases — words or patterns the AI should refuse to engage with. When the MutationObserver detects one of these patterns in the streaming output, the script does not continue the normal speech-and-animation flow. Instead it executes a defensive interrupt sequence:
 
-1. The running `speechSynthesis` utterance is immediately cancelled
+1. The active relay TTS playback is immediately cancelled
 2. All servo animation intervals are cleared
 3. A defensive posture command sequence fires over the WebSocket via the `sendJoint()` helper:
    - The **Vader head nod pair (ch 0/1)** is commanded to 60° — Darth Vader bows his head down ominously
@@ -223,32 +216,15 @@ Every completed spoken turn is written to `server/performance_logs.json` by the 
 |---|---|
 | `timestamp` | ISO 8601 time of the completed turn |
 | `speaker` | `"vader"` or `"trooper"` |
-| `text` | The full spoken text block |
-| `char_count` | Character length of the text |
+| `text` | Full spoken text block |
+| `char_count` | Character length of `text` |
 | `turn_number` | Sequential turn index in the current session |
-| `dial_snapshot` | All six dial normalized values (0–100) at generation time |
-| `speech_rate` | Computed `utterance.rate` value used for playback |
-
-This log persists to disk across sessions. A parallel in-memory `sessionLog` array mirrors the same records inside the browser; it enforces a **rolling circular window capped at 50 entries** — once the cap is reached, each new entry evicts the oldest via `sessionLog.shift()`, changing the runtime memory footprint from O(N) linear growth to O(1) flat and fully eliminating progressive browser degradation during infinite performances. Disk-based NDJSON logging in `relay.py` is unaffected; every turn still persists to `performance_logs.json`. After every completed turn, `pushToEval()` formats the current window as a running `[Turn N] SPEAKER: text…` transcript and writes it directly into the `/play/eval` iframe's prompt input for real-time automated scoring — no manual file handling required.
-
-### Stage 6 — Dynamic Real-Time Adaptations
-
-Four autonomous behaviour systems run in parallel with the core speech loop, reading live conversation data and adjusting the physical performance in real time.
-
-**Temperature Noise Engine** — `findTemperatureSlider()` captures the Temperature slider outside the tone-dials section using inverse DOM logic (ancestor contains “TEMPERATURE” but none of the six dial names). The normalised value (0–100) is stored in `temperatureValue`. During inter-turn silence, `startNoiseInterval()` fires `applyTemperatureNoise()` at 2000–500 ms intervals (scaled to temperature), injecting random ±8° deviations on random servo channels to simulate physical restlessness. The noise loop stops the instant `utterance.onstart` fires and restarts inside `scheduleHandoff()`. High temperature produces fidgety, restless figures; low temperature produces stillness.
-
-**Sentiment-Driven Persona Injection** — Every handoff calls `detectSentiment(completedText)`, which tests the completed turn against four aggressive-language regex patterns (threats, challenges, degrading terms). Two or more matches set sentiment to `'aggressive'`. `injectPersonaModifier()` then appends an emotional intensity tag to the largest textarea inside the `/play/persona` iframe using the React native-prototype setter. The modifier is stripped and replaced on each subsequent turn so it never accumulates. A live **Sentiment** badge in the HUD updates green (`neutral`) or red (`aggressive`) in real time.
-
-**Eval Closed-Loop Feedback** — `runEvalScoring()` calls `monitorEvalOutput()` before triggering generation. A one-shot MutationObserver waits on the `/play/eval` output area; `parseEvalScore()` extracts all `N/10` patterns from the scoring response and averages them. If the average falls below **6.0/10**, `applyEvalFeedback()` reduces `dialValues.ENERGY` and `dialValues.VERBOSITY` by up to 30 points, pushes the new values to the main page and all iframes, sends updated servo positions to both affected channels, and returns both heads to 90° neutral. The event is also logged to relay.py for the terminal record.
-
-**Diff Uncertainty Visualization** — `initDiffMonitor()` sets up a persistent MutationObserver on the `/play/diff` iframe body. After each mutation burst, `checkDiffOutputs()` identifies the two richest output-like text blocks and computes their Jaccard word-overlap similarity. Similarity below **0.35** (< 35% shared vocabulary = wildly divergent outputs) triggers `triggerDiffUncertainty()`: the **Trooper torso twist pair (ch 10/11)** swings side-to-side three times at 200 ms intervals — shaking his whole body — and the **Vader shoulder pair (ch 4/5)** raises to 135° and holds, both driven by `sendJoint()`. The physical state resolves automatically when similarity recovers or at the next `scheduleHandoff()` boundary.
-
----
+| `dial_snapshot` | All six normalized dial values at generation time |
+| `speech_rate` | Speech rate used for playback |
 
 ## 5. Multimodal Dial Modifiers
 
 ### Temperature Slider as a Physical Noise Source
-
 The shape-models.com playground has a **Temperature** slider at the top of the page above the six tone dials. The `getToneDialsSection` and `findDialName` guards keep it deliberately excluded from tone-dial binding so it never interferes with the six named dials.
 
 A separate `findTemperatureSlider()` function captures it using inverse DOM logic: it scans for a range input whose ancestor contains “TEMPERATURE” but none of the six dial names. The normalised value (0–100) is displayed in the HUD **TEMP** indicator and stored in `temperatureValue`, which drives the physical noise engine described in Stage 6 above.
@@ -390,11 +366,15 @@ Model selection and persona field changes follow the same pattern, targeting `<s
 
 | Component | Part | Role |
 |---|---|---|
+| Enclosure | 13 in x 10 in x 6.5 in unfinished pine box with hinged lid and front clasp | Low-voltage enclosure; the lid is the display stage and the base houses the removable tray |
+| Removable tray | 8 in x 10 in x 1/4 in MDF board | Serviceable internal mounting panel for the 16 servos, controller boards, terminal block, and cable anchors |
 | Microcontroller | ESP32 Type-C development board | Receives serial commands, drives PCA9685 via I2C |
 | PWM driver | PCA9685 16-channel board | Converts I2C commands to 50 Hz PWM signals for all 16 channels |
 | Servos (×16) | MG90S micro servo, metal gear | Antagonistic actuation — 8 channels per character |
 | Servo power supply | 5 V / 15 A (75 W) switching adapter | Dedicated high-current rail for 16 servos under antagonistic tension |
 | Power connector | Female barrel-to-screw-terminal block | Breaks the adapter barrel jack out to the PCA9685 V+ rail |
+| Power harness | 30 ft 14 AWG stranded red/black two-conductor wire | High-current 5 V and ground distribution from the barrel terminal to PCA9685 V+ and GND |
+| Logic harness | 40x 20 cm female-to-female Dupont jumper wires | Low-current ESP32-to-PCA9685 3.3 V, ground, SDA, and SCL connections; spares support tidy service loops |
 | Tendon line | 20 lb black braided PE fishing line | Zero-stretch, zero-memory tendon — holds antagonistic tension precisely |
 | Tendon sheath | PTFE tubing, 1 mm ID × 2 mm OD (3 m) | Low-friction Bowden routing on the backs of the figures |
 | Gantry | 1/8" (3 mm) clear cast acrylic sheet, 12" × 12" | Invisible "T" board — high-angle pulley for arm lifts |
@@ -402,11 +382,25 @@ Model selection and persona field changes follow the same pattern, targeting `<s
 | Cable management | Mini zip ties | Bundles the 16 servo leads and tendon runs |
 | Host computer | Lenovo ThinkPad | Runs relay.py, browser userscripts, and HTML dashboard |
 
-### Bill of Materials (Phase 3 Antagonistic Upgrade)
+### Enclosed Stage Architecture
 
-- **ESP32 + PCA9685** — unchanged controller stack, now using all 16 channels
+The **13 in x 10 in x 6.5 in unfinished pine box** replaces the unspecified stage base. Its hinged lid is the visible display stage: both figures sit on the lid, and the clear acrylic T gantry is mounted at the rear of the lid to redirect the shoulder tendons. The box base remains a low-voltage service enclosure.
+
+The **8 in x 10 in x 1/4 in MDF board** is a single removable internal tray. It carries the 16 MG90S servos, PCA9685, ESP32, barrel-to-screw-terminal block, and cable-management anchors. Arrange the tray so the hinge and front clasp remain clear, every servo horn and tendon spool has unobstructed travel, and the tray can lift out for maintenance without individually unplugging servo leads.
+
+Route tendons from the lid stage to the tray separately from electrical wiring. Leave a restrained service loop at the lid-to-box transition so the lid can open fully and the tray can be removed. Secure slack away from servo horns, tendon spools, PTFE tubing, and the acrylic gantry. Label each tray position, PCA9685 port, servo lead, and matching tendon pair `CH00` through `CH15` using the channel map in Section 3.
+
+The 5 V / 15 A adapter remains **external**. Only its low-voltage 5 V output enters the box through a secured, strain-relieved cable path near the controller side. Do not install AC mains wiring, an AC inlet, or an internal mains power supply in the wooden enclosure.
+
+### Bill of Materials (Phase 3 Enclosed Antagonistic Build)
+
+- **13 in x 10 in x 6.5 in unfinished pine hinged/clasp box** — low-voltage enclosure; lid is the display stage
+- **8 in x 10 in x 1/4 in MDF board** — removable servo/controller mounting tray
+- **ESP32 + PCA9685** — controller stack using all 16 channels
 - **16× MG90S micro servos** (metal gear)
 - **5 V / 15 A (75 W) switching adapter** with a female barrel-to-screw-terminal block
+- **30 ft 14 AWG stranded red/black two-conductor wire** — high-current 5 V distribution only
+- **40x 20 cm female-to-female Dupont jumper wires** — ESP32-to-PCA9685 low-current logic harness only
 - **20 lb black braided PE fishing line** (zero stretch, zero memory)
 - **3 m of 1 mm ID × 2 mm OD PTFE tubing**
 - **1/8" (3 mm) clear cast acrylic sheet, 12" × 12"**
@@ -417,28 +411,19 @@ Model selection and persona field changes follow the same pattern, targeting `<s
 ```
 ThinkPad (USB)
     │
-    └── ESP32 (GPIO 21 SDA, GPIO 22 SCL)
-            │
-            └── PCA9685 (all 16 channels)
-                    │
-                    ├── CH 0  ── Vader head nod     — pull down
-                    ├── CH 1  ── Vader head nod     — pull back
-                    ├── CH 2  ── Vader torso twist  — pull left
-                    ├── CH 3  ── Vader torso twist  — pull right
-                    ├── CH 4  ── Vader shoulder     — pull up-forward
-                    ├── CH 5  ── Vader shoulder     — pull down-back
-                    ├── CH 6  ── Vader elbow        — curl in
-                    ├── CH 7  ── Vader elbow        — extend out
-                    ├── CH 8  ── Trooper head nod   — pull down
-                    ├── CH 9  ── Trooper head nod   — pull back
-                    ├── CH 10 ── Trooper torso twist — pull left
-                    ├── CH 11 ── Trooper torso twist — pull right
-                    ├── CH 12 ── Trooper shoulder   — pull up-forward
-                    ├── CH 13 ── Trooper shoulder   — pull down-back
-                    ├── CH 14 ── Trooper elbow      — curl in
-                    └── CH 15 ── Trooper elbow      — extend out
-
-5V/15A Adapter ── barrel-to-screw-terminal block ── PCA9685 V+ rail (isolated from ThinkPad logic)
+    └── ESP32
+            ├── Dupont: 3.3 V ───────────────────── PCA9685 VCC (logic)
+            ├── Dupont: GND ─────────────────────── PCA9685 GND
+            ├── Dupont: GPIO 21 / SDA ───────────── PCA9685 SDA
+            └── Dupont: GPIO 22 / SCL ───────────── PCA9685 SCL
+                                                        │
+External 5 V / 15 A adapter                            │
+    │                                                   │
+    └── secured low-voltage entry ── fused distribution ┤
+             ├── 14 AWG red: +5 V ─────────────────── PCA9685 V+
+             └── 14 AWG black: GND ────────────────── PCA9685 GND
+                                                        │
+                                                        └── all 16 servo channels
 ```
 
 ### Power Isolation & Current Budget
@@ -446,9 +431,15 @@ ThinkPad (USB)
 With all 16 MG90S servos under constant antagonistic tension, all channels can simultaneously be under load. The supply is a dedicated **5 V / 15 A (75 W)** switching adapter.
 
 - The adapter's barrel jack terminates in a **female barrel-to-screw-terminal block**, which breaks out to the PCA9685 **V+ rail** with a solid screwed connection rated for the higher current.
+- Use the red 14 AWG conductor only for `+5 V` and the black 14 AWG conductor only for `GND` between the terminal block and PCA9685 rail. Dupont jumpers must never carry servo power.
 - The 15 A supply feeds **only** the PCA9685 V+ rail; the ThinkPad USB port provides logic power to the ESP32 only — no servo current passes through the USB bus.
 - All grounds (ESP32 GND, PCA9685 GND, and adapter GND) are connected at a single shared ground point.
-- Mini zip ties bundle the 16 servo leads to keep the high-current runs tidy and strain-relieved.
+- The four required Dupont connections are ESP32 `3.3 V -> VCC`, `GND -> GND`, `GPIO 21 -> SDA`, and `GPIO 22 -> SCL` on the PCA9685. Keep this low-current harness physically separate from 14 AWG power wiring and moving tendons.
+- Mini zip ties bundle the 16 servo leads, while cable anchors secure the power and logic harnesses to the MDF tray. Provide a restrained service loop so the tray can be removed and the lid can open without stressing connectors.
+- With the external adapter unplugged, inspect all terminals, verify red/black polarity at the PCA9685 rail, confirm continuity between ESP32/PCA9685/adapter negative, and verify there is no `+5 V`-to-ground short. Tug-test the cable entry and tray anchors before applying power.
+- Unplug the external adapter before opening the box, changing wiring, or removing the MDF tray.
+- Add a DC-rated inline fuse at the positive lead near the barrel terminal and a low-ESR bulk capacitor at the servo rail. Select fuse size only after measuring normal and peak current, and use components rated above 5 V and the expected current.
+- Verify the exact PCA9685 board's terminal block and PCB traces are rated for the measured servo current. If they are not, use a separately rated fused distribution block and route only the board's local servo supply connection through its terminal.
 
 ### Communication Stack
 
@@ -474,7 +465,7 @@ Examples:
   S12:135*0E  →  Trooper shoulder — pull up-forward (arm lifts via gantry)
 ```
 
-The firmware's `processLine()` locates the `*` delimiter, recomputes the XOR checksum over the payload, and compares it to the received two-hex-digit value. Any frame that is missing the `*` delimiter, has a truncated checksum field, or whose checksum does not match is discarded silently without calling `moveServo()`. The relay builds checksummed frames automatically via `serial_checksum()` in `relay.py`, so manual calculation is only needed during direct serial-terminal diagnostics. Angles are clamped first by `processLine()`, then by each channel's `SOFT_MIN_ANGLE` / `SOFT_MAX_ANGLE` inside `moveServo()`. Channels 0–15 are valid; edit the 16-entry soft-limit arrays in the firmware and reflash during Phase 4 to match each figure's physical stop points and prevent antagonistic over-tension. All other channels are silently ignored.
+The firmware's `processLine()` locates the `*` delimiter, recomputes the XOR checksum over the payload, and compares it to the received two-hex-digit value. Any frame that is missing the `*` delimiter, has a truncated checksum field, or whose checksum does not match is discarded silently without calling `moveServo()`. The relay builds checksummed frames automatically via `serial_checksum()` in `relay.py`, so manual calculation is only needed during direct serial-terminal diagnostics. Angles are clamped first by `processLine()`, then by each channel's `SOFT_MIN_ANGLE` / `SOFT_MAX_ANGLE` inside `moveServo()`. Channels 0–15 are valid; edit the 16-entry soft-limit arrays in the firmware and reflash during Phase 4 to match each figure's physical stop points and prevent antagonistic over-tension. An `ACK:S<channel>:<angle>:APPLIED` response confirms that firmware updated PWM; `:UNCHANGED` means the requested PWM was already active. Neither response proves physical motion, so visually verify each channel. All other channels are silently ignored.
 
 ---
 
@@ -571,17 +562,24 @@ RobotProject/
 > The loop section shows a session timer, live animation ticks/s, and a health watchdog. Claude Haiku 4.5
 > API mandate enforced at Start Loop. Awaiting hardware.
 
-### Phase 3 — Physical Build (hardware — Antagonistic 16-Servo Upgrade)
-- [ ] Stage base constructed with mounting positions for all 16 servos
-- [ ] Transparent acrylic "T" gantry cut from 1/8" clear cast acrylic and mounted invisibly behind the figures
-- [ ] PTFE Bowden tubes (1 mm ID × 2 mm OD) anchored to the backs of the figures using a heated needle to melt channels through the PVC/ABS plastic, then secured with 0.5 mm brass wire or micro zip-ties for high-tension stability; arm tubes routed over the gantry as high-angle pulleys
-- [ ] Antagonistic tendon pairs (20 lb braided PE line) anchored to each joint hinge and to opposing servo horns
-- [ ] All 16 MG90S servos wired to the PCA9685 and tested independently (relay sweep covers ch 0–15)
-- [ ] 5 V / 15 A supply wired through the barrel-to-screw-terminal block, isolated and verified safe under full antagonistic load
+### Phase 3 — Physical Build (enclosed, removable 16-servo stage)
+- [ ] Prepare the 13 in × 10 in × 6.5 in pine box: use its lid as the display stage, preserve hinge/clasp clearance, and create a secured low-voltage cable entry on the controller side.
+- [ ] Cut and mount the clear acrylic "T" gantry at the rear of the lid stage. Confirm the lid can open without contacting the gantry, figures, or tendons.
+- [ ] Build the removable 8 in × 10 in × 1/4 in MDF tray. Lay out and label all 16 servo positions, PCA9685 ports, ESP32, barrel terminal, and cable anchors `CH00` through `CH15` before fastening hardware.
+- [ ] Mount the servos, PCA9685, ESP32, and barrel terminal to the MDF tray. Confirm the tray lifts out without unplugging individual servo leads and that every lead has a restrained service loop.
+- [ ] Build the high-current harness: connect the external adapter's barrel terminal to PCA9685 `V+` and `GND` with 14 AWG red/black wire only. Secure and label polarity at both ends.
+- [ ] Build the logic harness with female-to-female Dupont jumpers only: ESP32 `3.3 V → VCC`, `GND → GND`, `GPIO 21 → SDA`, and `GPIO 22 → SCL` on the PCA9685. Keep these jumpers away from 14 AWG runs and moving mechanisms.
+- [ ] Route and tie down the 16 servo leads along the tray perimeter. Keep all power, logic, servo, and tendon paths clear of servo horns, tendon spools, PTFE tubing, and the lid hinge.
+- [ ] Anchor PTFE Bowden tubes (1 mm ID × 2 mm OD) to figure backs using heat-melted PVC/ABS channels plus 0.5 mm brass wire or micro zip-ties. Route arm tubes over the gantry as high-angle pulleys.
+- [ ] Install and label the 20 lb braided PE antagonistic tendon pairs between each joint hinge and its opposing servo horns. Set initial tension with the external 5 V adapter unplugged.
+- [ ] Complete the power-off inspection: no `+5 V`-to-ground short, correct rail polarity, shared ground continuity, secured terminals, strain relief, and no wire/tendon interference through the lid and tray range of motion.
+- [ ] Connect the external 5 V adapter and verify one conservatively limited channel at a time before any all-channel command. Confirm label, direction, clearance, and absence of connector heating for `CH00` through `CH15`.
 
 ### Phase 4 — Integration & Calibration
 - [x] Browser animation layer drives all 16-channel antagonistic pairs via `sendJoint(pair, angle)` with per-joint `CALIBRATION_CURVES` piecewise spline interpolation — head bob, arm raise, refusal postures, noise engine, diff response, and dial forwarding all address joints by name (Vader 0–7, Trooper 8–15); HUD Calibration dropdown lists all 16 channels
+- [ ] First-power commissioning: run the relay's 85°–95° neutral-centered sequence on one labeled channel at a time, confirming direction, clearance, and no connector heating before proceeding to the next channel.
 - [ ] Per-servo angle limits tuned — move each figure joint by hand to find physical stops; update `SOFT_MIN_ANGLE` / `SOFT_MAX_ANGLE` for all 16 channels in firmware to prevent antagonistic over-tension; use HUD Calibration slider to confirm servo obeys limits
+- [ ] Per-pair calibration curves measured — after all 16 soft limits are installed, tune the five browser `CALIBRATION_CURVES` waypoints for each of the eight antagonistic pairs against the completed lid, gantry, tray, and tendon routing.
 - [ ] Tone dial → servo speed mapping calibrated — run the autonomous loop and adjust the ENERGY/VERBOSITY animation interval formula until head-bob speed matches speech cadence
 - [ ] Full autonomous loop tested for 10+ minutes without intervention
 
@@ -592,4 +590,4 @@ RobotProject/
 
 ---
 
-*Last updated: 2026-07-17 — v5.3.0: Shape's single-turn tone playground is wrapped by a request-bound conversation controller. Each handoff includes the persistent premise, up to 20 labelled turns, and an explicit next speaker. Completion follows the site's `Streaming`/`Done` state, with a conservative fallback. History and handoff continue without the servo relay, and TTS errors no longer terminate the text conversation. Existing checksum, trajectory damping, calibration, thermal protection, and dynamic behavior features are preserved.*
+*Last updated: 2026-07-24 — v5.4.0: Phase 3 uses a 13 in x 10 in x 6.5 in pine box with a lid-stage and a removable 8 in x 10 in x 1/4 in MDF motor/control tray. The external 5 V adapter, 14 AWG high-current harness, and Dupont logic harness are explicitly separated and included in the build checklist. Relay TTS, PCA9685 health checks, serialized commissioning, measured-range validation, and required power-distribution protection are documented. Final servo limits and tendon curves remain pending physical measurement.*

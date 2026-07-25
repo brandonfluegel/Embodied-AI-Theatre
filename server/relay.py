@@ -35,9 +35,11 @@ from elevenlabs.client import ElevenLabs
 # Leave as None to auto-detect the first available serial port.
 SERIAL_PORT: str | None = None
 
-# Set to True to run without the ESP32 plugged in.
-# Servo commands will be printed to the terminal instead of sent over serial.
-MOCK_MODE: bool = True
+# Set ROBOT_MOCK_MODE=true to run without the ESP32 plugged in. Production mode
+# is the default so a deployed show does not silently discard servo commands.
+MOCK_MODE: bool = os.getenv("ROBOT_MOCK_MODE", "false").strip().lower() in {
+    "1", "true", "yes", "on"
+}
 
 # Must match the baud rate defined in the Arduino sketch.
 BAUD_RATE: int = 115200
@@ -46,8 +48,8 @@ BAUD_RATE: int = 115200
 WS_HOST: str = "localhost"
 WS_PORT: int = 8765
 
-pygame.mixer.init()
-tts_client = ElevenLabs(api_key=os.environ.get("ELEVENLABS_API_KEY"))
+tts_client: ElevenLabs | None = None
+active_tts_task: asyncio.Task | None = None
 
 VOICE_IDS = {
     "vader": "ANimV6aIZ2PFElR05XSg",
@@ -66,11 +68,18 @@ LOGS_PATH: str = os.path.join(
 # Serial output throttle: sample the latest requested servo state every 30 ms (~33 FPS).
 SERIAL_WRITE_INTERVAL_SECONDS: float = 0.030
 
+# First-power verification stays close to neutral until each installed tendon
+# path has measured soft limits in the firmware.
+COMMISSIONING_TEST_ANGLES: tuple[int, ...] = (90, 95, 90, 85, 90)
+
 # Latest requested angle per servo channel, updated by websocket producers.
 target_angles: dict[int, int] = {}
 
 # Last angle actually written to serial per servo channel.
 last_sent_angles: dict[int, int] = {}
+
+# Direct commissioning frames must never interleave with cached browser motion.
+commissioning_lock = asyncio.Lock()
 
 # ── Serial helpers ────────────────────────────────────────────────────────────
 
@@ -111,7 +120,34 @@ def serial_checksum(payload: str) -> str:
     return f"{chk:02X}"
 
 
+def get_tts_client() -> ElevenLabs:
+    """Lazily initialize the optional host-audio and ElevenLabs dependencies."""
+    global tts_client
+    api_key = os.environ.get("ELEVENLABS_API_KEY")
+    if not api_key:
+        raise RuntimeError("ELEVENLABS_API_KEY is not configured")
+    if pygame.mixer.get_init() is None:
+        pygame.mixer.init()
+    if tts_client is None:
+        tts_client = ElevenLabs(api_key=api_key)
+    return tts_client
+
+
 # ── Telemetry logging ─────────────────────────────────────────────
+
+def valid_telemetry(entry: dict) -> bool:
+    """Accept only complete turn records from the trusted browser client."""
+    return (
+        entry.get("speaker") in {"vader", "trooper"}
+        and isinstance(entry.get("text"), str)
+        and bool(entry["text"].strip())
+        and isinstance(entry.get("turn"), int)
+        and entry["turn"] > 0
+        and isinstance(entry.get("char_count"), int)
+        and entry["char_count"] == len(entry["text"])
+        and isinstance(entry.get("dials"), dict)
+    )
+
 
 def append_telemetry(entry: dict) -> None:
     """
@@ -132,6 +168,10 @@ def append_telemetry(entry: dict) -> None:
         speech_rate computed utterance.rate value
         dials       snapshot of all six dial values (0-100)
     """
+    if not valid_telemetry(entry):
+        print("[telemetry] Rejected invalid turn record.")
+        return
+
     entry["timestamp"] = datetime.now(timezone.utc).isoformat()
     try:
         with open(LOGS_PATH, "a", encoding="utf-8") as f:
@@ -152,22 +192,27 @@ async def run_sweep_test(
     ser: serial.Serial,
 ) -> None:
     """
-    Sweep each servo through a safe range of motion to verify Phase 3 wiring.
-    Sequence per channel: 90° → 130° → 90° → 50° → 90° (500 ms between steps).
+    Verify Phase 3 wiring with a conservative commissioning range.
+    Sequence per channel: 90 degrees -> 95 degrees -> 90 degrees -> 85 degrees -> 90 degrees
+    (500 ms between steps). Do not use this test for full-range motion until
+    measured soft limits are installed in the firmware.
 
     Sends {"type": "sweep_complete"} when all sixteen channels have been tested.
     Trigger this from the HUD Calibration panel's \"Sweep All\" button.
     """
-    print("[sweep] Servo sweep test started.")
-    for ch in range(16):
-        for angle in [90, 130, 90, 50, 90]:
-            _payload = f"{ch}:{angle}"
-            line = f"S{_payload}*{serial_checksum(_payload)}\n"
-            await write_serial_line(ser, line)
-            print(f"[sweep]  ch{ch} \u2192 {angle}\u00b0")
-            await asyncio.sleep(0.5)
-    print("[sweep] Sweep test complete.")
-    await websocket.send(json.dumps({"type": "sweep_complete"}))
+    async with commissioning_lock:
+        target_angles.clear()
+        last_sent_angles.clear()
+        print("[sweep] Servo sweep test started.")
+        for ch in range(16):
+            for angle in COMMISSIONING_TEST_ANGLES:
+                _payload = f"{ch}:{angle}"
+                line = f"S{_payload}*{serial_checksum(_payload)}\n"
+                await write_serial_line(ser, line)
+                print(f"[sweep]  ch{ch} \u2192 {angle}\u00b0")
+                await asyncio.sleep(0.5)
+        print("[sweep] Sweep test complete.")
+        await websocket.send(json.dumps({"type": "sweep_complete"}))
 
 
 async def run_channel_test(
@@ -176,19 +221,75 @@ async def run_channel_test(
     ch: int,
 ) -> None:
     """
-    Sweep a single channel through 90\u00b0 \u2192 130\u00b0 \u2192 90\u00b0 \u2192 50\u00b0 \u2192 90\u00b0 with 500 ms between steps.
+    Verify one channel at 90\u00b0 \u2192 95\u00b0 \u2192 90\u00b0 \u2192 85\u00b0 \u2192 90\u00b0 with 500 ms between steps.
     Isolates one servo during Phase 3 wiring without disturbing the other fifteen.
     Sends {\"type\": \"channel_test_complete\", \"channel\": ch} when finished.
     """
     ch = max(0, min(15, ch))
-    print(f"[sweep] Single-channel test: CH{ch}")
-    for angle in [90, 130, 90, 50, 90]:
-        _payload = f"{ch}:{angle}"
-        line = f"S{_payload}*{serial_checksum(_payload)}\n"
-        await write_serial_line(ser, line)
-        print(f"[sweep]  ch{ch} \u2192 {angle}\u00b0")
-        await asyncio.sleep(0.5)
-    await websocket.send(json.dumps({"type": "channel_test_complete", "channel": ch}))
+    async with commissioning_lock:
+        target_angles.clear()
+        last_sent_angles.clear()
+        print(f"[sweep] Single-channel test: CH{ch}")
+        for angle in COMMISSIONING_TEST_ANGLES:
+            _payload = f"{ch}:{angle}"
+            line = f"S{_payload}*{serial_checksum(_payload)}\n"
+            await write_serial_line(ser, line)
+            print(f"[sweep]  ch{ch} \u2192 {angle}\u00b0")
+            await asyncio.sleep(0.5)
+        await websocket.send(json.dumps({"type": "channel_test_complete", "channel": ch}))
+
+
+def normalized_full_range_limits(limits: object) -> list[tuple[int, int, int]] | None:
+    """Validate one measured min/max pair for every PCA9685 channel."""
+    if not isinstance(limits, list) or len(limits) != 16:
+        return None
+
+    normalized: dict[int, tuple[int, int]] = {}
+    for item in limits:
+        if not isinstance(item, dict):
+            return None
+        try:
+            channel = int(item["channel"])
+            minimum = int(item["min"])
+            maximum = int(item["max"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if channel in normalized or not (0 <= channel <= 15 and 0 <= minimum <= 90 <= maximum <= 180):
+            return None
+        normalized[channel] = (minimum, maximum)
+
+    if len(normalized) != 16:
+        return None
+    return [(channel, *normalized[channel]) for channel in range(16)]
+
+
+async def run_full_range_test(
+    websocket: websockets.ServerConnection,
+    ser: serial.Serial | None,
+    limits: object,
+) -> None:
+    """Exercise each channel only within its browser-supplied measured limits."""
+    ranges = normalized_full_range_limits(limits)
+    if ranges is None:
+        await websocket.send(json.dumps({
+            "type": "full_range_rejected",
+            "reason": "all_16_measured_limits_required",
+        }))
+        return
+
+    async with commissioning_lock:
+        target_angles.clear()
+        last_sent_angles.clear()
+        print("[sweep] Full-range validation started.")
+        for channel, minimum, maximum in ranges:
+            for angle in (90, minimum, 90, maximum, 90):
+                payload = f"{channel}:{angle}"
+                line = f"S{payload}*{serial_checksum(payload)}\n"
+                await write_serial_line(ser, line)
+                print(f"[sweep]  ch{channel} -> {angle} degrees")
+                await asyncio.sleep(0.5)
+        print("[sweep] Full-range validation complete.")
+        await websocket.send(json.dumps({"type": "full_range_complete"}))
 
 
 async def send_replay(websocket: websockets.ServerConnection) -> None:
@@ -228,9 +329,10 @@ async def play_high_res_audio(
 ) -> None:
     try:
         voice_id = VOICE_IDS.get(speaker, VOICE_IDS["trooper"])
+        client = get_tts_client()
 
         def generate_audio_bytes() -> bytes:
-            audio_stream = tts_client.text_to_speech.convert(
+            audio_stream = client.text_to_speech.convert(
                 voice_id=voice_id,
                 text=text,
                 model_id="eleven_multilingual_v2",
@@ -246,6 +348,10 @@ async def play_high_res_audio(
         while pygame.mixer.music.get_busy():
             await asyncio.sleep(0.05)
         await websocket.send(json.dumps({"type": "tts_complete", "speaker": speaker, "text": text}))
+    except asyncio.CancelledError:
+        if pygame.mixer.get_init() is not None:
+            pygame.mixer.music.stop()
+        raise
     except Exception as exc:
         print(f"[tts] Error for speaker={speaker}: {exc}")
         try:
@@ -287,6 +393,8 @@ async def write_serial_line(ser: serial.Serial | None, line: str) -> None:
 async def serial_writer(ser: serial.Serial | None) -> None:
     while True:
         await asyncio.sleep(SERIAL_WRITE_INTERVAL_SECONDS)
+        if commissioning_lock.locked():
+            continue
         for channel, angle in sorted(target_angles.items()):
             if last_sent_angles.get(channel) == angle:
                 continue
@@ -337,7 +445,15 @@ async def handle_client(
                 speaker = str(payload.get("speaker", "vader"))
                 text = str(payload.get("text", ""))
                 if text:
-                    asyncio.create_task(play_high_res_audio(websocket, speaker, text))
+                    global active_tts_task
+                    if active_tts_task and not active_tts_task.done():
+                        active_tts_task.cancel()
+                    active_tts_task = asyncio.create_task(play_high_res_audio(websocket, speaker, text))
+                continue
+
+            if isinstance(payload, dict) and payload.get("type") == "tts_cancel":
+                if active_tts_task and not active_tts_task.done():
+                    active_tts_task.cancel()
                 continue
 
             # Eval feedback: browser reports that the session score dropped below threshold
@@ -362,7 +478,18 @@ async def handle_client(
                 await run_channel_test(websocket, ser, channel)
                 continue
 
+            if isinstance(payload, dict) and payload.get("type") == "full_range_test":
+                await run_full_range_test(websocket, ser, payload.get("limits"))
+                continue
+
             commands = payload if isinstance(payload, list) else [payload]
+
+            if commissioning_lock.locked():
+                await websocket.send(json.dumps({
+                    "type": "command_rejected",
+                    "reason": "commissioning_in_progress",
+                }))
+                continue
 
             for cmd in commands:
                 try:
@@ -394,6 +521,7 @@ async def main() -> None:
     else:
         port_name = SERIAL_PORT or find_serial_port()
         ser = open_serial(port_name)
+        print("[relay] HARDWARE MODE — servo commands will be sent to the ESP32.")
 
     async def handler(ws: websockets.ServerConnection) -> None:
         await handle_client(ws, ser)

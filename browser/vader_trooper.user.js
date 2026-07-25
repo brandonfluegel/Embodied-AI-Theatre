@@ -284,6 +284,18 @@
                     const el = document.getElementById('vt-cal-status');
                     if (el) el.textContent = `CH${msg.channel} test complete \u2713`;
                 }
+                else if (msg.type === 'full_range_complete') {
+                    const el = document.getElementById('vt-cal-status');
+                    if (el) el.textContent = 'Measured-range validation complete \u2713';
+                }
+                else if (msg.type === 'full_range_rejected') {
+                    const el = document.getElementById('vt-cal-status');
+                    if (el) el.textContent = 'Record min and max for all 16 channels first';
+                }
+                else if (msg.type === 'command_rejected') {
+                    const el = document.getElementById('vt-cal-status');
+                    if (el) el.textContent = 'Commissioning in progress; motion command ignored';
+                }
             } catch (_) {}
         };
 
@@ -495,6 +507,9 @@
     function triggerDefensivePosture() {
         stopAnimation();
         stopNoiseInterval();   // Feature 1: silence noise on defensive posture
+        if (wsReady && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'tts_cancel' }));
+        }
         sendJoint(JOINTS.VADER_HEAD, 60);
         sendJoint(JOINTS.TROOPER_HEAD, 120);
         loopPaused = true;
@@ -1635,6 +1650,7 @@
                     </div>
                     <div id="vt-cal-limits" style="font-size:9px;color:#52525b;margin-bottom:4px;padding:0 2px">—</div>
                     <button id="vt-sweep-btn" class="vt-btn vt-btn-ghost">⚙ Sweep All Channels</button>
+                    <button id="vt-full-sweep-btn" class="vt-btn vt-btn-ghost">↔ Validate Measured Ranges</button>
                     <div id="vt-cal-status" style="font-size:10px;color:#52525b;margin-top:4px;padding:0 2px">—</div>
                 </div>
 
@@ -1979,7 +1995,9 @@
         });
 
         // "Set Min" / "Set Max" — record current angle as suggested soft limit for firmware
-        const suggestedLimits = Array.from({ length: 6 }, () => ({}));
+        // The calibration selector exposes every PCA9685 channel, so retain a
+        // separate measured min/max record for all 16 firmware limit entries.
+        const suggestedLimits = Array.from({ length: 16 }, () => ({}));
         const calLimitsEl     = document.getElementById('vt-cal-limits');
 
         function updateLimitsDisplay(ch) {
@@ -2008,6 +2026,26 @@
             }
             ws.send(JSON.stringify({ type: 'sweep_test' }));
             if (statusEl) statusEl.textContent = 'Sweeping\u2026';
+        });
+
+        // Full-range validation requires a measured min and max for every channel.
+        document.getElementById('vt-full-sweep-btn')?.addEventListener('click', () => {
+            const statusEl = document.getElementById('vt-cal-status');
+            if (!wsReady || ws.readyState !== WebSocket.OPEN) {
+                if (statusEl) statusEl.textContent = 'Relay offline';
+                return;
+            }
+            const limits = suggestedLimits.map((limit, channel) => ({
+                channel,
+                min: limit.min,
+                max: limit.max,
+            }));
+            if (limits.some(limit => !Number.isInteger(limit.min) || !Number.isInteger(limit.max))) {
+                if (statusEl) statusEl.textContent = 'Record min and max for all 16 channels first';
+                return;
+            }
+            ws.send(JSON.stringify({ type: 'full_range_test', limits }));
+            if (statusEl) statusEl.textContent = 'Validating measured ranges\u2026';
         });
 
         window.addEventListener('pagehide', stopAllActivity);
