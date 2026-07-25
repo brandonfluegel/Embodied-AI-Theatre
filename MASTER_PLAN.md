@@ -408,7 +408,7 @@ Each MG90S package supplies the following hardware for its servo. For the full 1
 
 ### Phase 3 Servo Assembly Procedure
 
-1. Confirm the tray's 1.5 in tendon corridor and 3.5 in x 3.5 in power/controller zone are marked. Mark the remaining 4 x 4 servo grid and its `CH00`–`CH15` channel labels before making any mounting dints.
+1. Verify the hand-drawn tray layout against the measured coordinates below before making any mounting dints: the 1.5 in tendon corridor, 3.5 in x 3.5 in Power & Controller Zone, and the 4 x 4 `CH00`–`CH15` servo grid are already marked.
 2. Set every servo into its labeled grid position with its brass/white output spline uniformly down toward the bottom Service Wall tendon corridor. Confirm that the future double-arm horns have clearance from each other and from the controller zone.
 3. At each servo's two plastic side tabs, make starter dints in the MDF. Do not pre-drill the tray.
 4. Manually drive the two supplied pointy self-tapping wood screws through the side tabs into the starter dints. Do not use power tools. Leave every servo bare: no horn and no M2 spline screw.
@@ -424,28 +424,42 @@ The **13 in x 10 in x 6.5 in unfinished pine box** replaces the unspecified stag
 
 When the clasps are unlatched, the lid pivots forward toward the audience around the audience/hinge edge. The gantry remains fixed on the service-side lower box wall. Both figures sit between the two edges, with their backs and PTFE tube exits toward the gantry/service edge. The box base remains a low-voltage service enclosure.
 
-The **8 in x 10 in x 1/4 in MDF board** will sit flat inside the box as a single removable internal tray for the 16 MG90S servos, PCA9685, ESP32, barrel-to-screw-terminal block, and cable-management anchors. **Current build status:** only the tendon corridor and power/controller zone have been penciled onto the board. The 16 servo positions, `CH00`–`CH15` labels, and all component mounting positions remain unmarked and no components are mounted. For every spatial instruction and diagram, use a top-down view with the Service Wall at the **bottom**. Reserve these finalized areas:
+The **8 in x 10 in x 1/4 in MDF board** will sit flat inside the box as a single removable internal tray for the 16 MG90S servos, PCA9685, ESP32, barrel-to-screw-terminal block, and cable-management anchors. **Current build status:** all zone boundaries, the 4 x 4 servo grid, and `CH00`–`CH15` channel labels have been hand-measured and penciled onto the board; no hardware is mounted. For every spatial instruction and diagram, use a top-down view with the Service Wall at the **bottom**. Use the bottom-left tray corner as origin `(x=0, y=0)`, with `x` increasing left-to-right and `y` increasing from the Service Wall toward the Audience Edge. Reserve these finalized areas:
 
-- A **1.5 in-wide tendon corridor** along the entire bottom edge of the tray, adjacent to the Service Wall / clasps. It carries the PTFE tubes and fishing lines descending from the figures and fixed gantry. Do not place power wiring or logic wiring in the unoccupied portion of this corridor.
-- A **3.5 in x 3.5 in Power & Controller Zone** in the bottom-left corner: barrel terminal, fuse holder, distribution block if required, bulk capacitor, PCA9685, and ESP32. It intentionally overlaps the left side of the tendon-corridor baseline to sit directly next to the Service Wall power-entry hole. Mount the ESP32 with its USB-C port facing left toward the outer box wall.
-- A **4 x 4 servo field** in the remaining upper area, above the 1.5 in corridor and outside the Power & Controller Zone. Mark and mount `CH00` through `CH15` there. Every brass/white output spline must point uniformly **down** toward the bottom tendon corridor, with enough space for each double-arm horn to rotate without touching its neighbor.
+- A **1.5 in-wide tendon corridor** at `y=0.0–1.5 in` along the full bottom edge, adjacent to the Service Wall / clasps. It carries the PTFE tubes and fishing lines descending from the figures and fixed gantry. The open tendon-routing portion is `x=3.5–10.0 in`; keep it clear of mounted hardware, power wiring, and logic wiring.
+- A **3.5 in x 3.5 in Power & Controller Zone** at `x=0.0–3.5 in`, `y=0.0–3.5 in`: barrel terminal, fuse holder, distribution block if required, bulk capacitor, PCA9685, and ESP32. It intentionally occupies the left 3.5 in of the corridor baseline (`y=0.0–1.5 in`) to sit directly next to the Service Wall power-entry hole; this occupied overlap is not available for tendon routing. Mount the ESP32 with its USB-C port facing left toward the outer box wall.
+- A **6.5 in x 6.5 in, 4 x 4 servo field** at `x=3.5–10.0 in`, `y=1.5–8.0 in`. It is divided into sixteen uniform **1.625 in x 1.625 in (1-5/8 in x 1-5/8 in)** cells. Mark and mount `CH00` through `CH15` in the row-major channel order below. Every brass/white output spline must point uniformly **down** toward the bottom tendon corridor, with enough space for each double-arm horn to rotate without touching its neighbor.
+
+| Grid row, top to bottom | `y` bounds (in) | Cell 1 | Cell 2 | Cell 3 | Cell 4 |
+|---|---:|---|---|---|---|
+| Row 1 | `6.375–8.000` | `CH00` | `CH01` | `CH02` | `CH03` |
+| Row 2 | `4.750–6.375` | `CH04` | `CH05` | `CH06` | `CH07` |
+| Row 3 | `3.125–4.750` | `CH08` | `CH09` | `CH10` | `CH11` |
+| Row 4 | `1.500–3.125` | `CH12` | `CH13` | `CH14` | `CH15` |
+
+| Grid column, left to right | `x` bounds (in) |
+|---|---:|
+| Column 1 | `3.500–5.125` |
+| Column 2 | `5.125–6.750` |
+| Column 3 | `6.750–8.375` |
+| Column 4 | `8.375–10.000` |
 
 ```text
-Top-down tray view: Audience Edge / hinges = BACK (top); Service Wall / clasps = FRONT (bottom)
+Top-down tray view: 10 in wide x 8 in high; Audience Edge / hinges = BACK (top)
+Service Wall / clasps = FRONT (bottom); origin (0,0) is bottom-left
 
                                                  AUDIENCE EDGE / HINGES (BACK)
     +----------------------------------------------------------------+
-    |  CH00     CH01     CH02     CH03                              |
-    |  CH04     CH05     CH06     CH07        4 x 4 SERVO FIELD     |
-    |  CH08     CH09     CH10     CH11        splines point DOWN    |
-    |  CH12     CH13     CH14     CH15               v v v v        |
-    |                                                                |
-    |  +------------------------+                                   |
-    |  | POWER & CONTROLLER     |                                   |
-    |  | 3.5 in x 3.5 in        |                                   |
-    |  | ESP32 USB-C faces LEFT |                                   |
-    |  +------------------------+                                   |
-    |  <--- 1.5 in TENDON CORRIDOR (full tray width; zone overlaps) |
+    |                     CH00     CH01     CH02     CH03          |
+    |                     CH04     CH05     CH06     CH07          |
+    |                     CH08     CH09     CH10     CH11          |
+    |  +----------------+ CH12     CH13     CH14     CH15          |
+    |  | POWER &        |                splines point DOWN        |
+    |  | CONTROLLER     |                      v v v v              |
+    |  | 3.5 x 3.5 in   |                                           |
+    |  | USB-C LEFT     |                                           |
+    |  +----------------+-------------------------------------------|
+    |  zone overlap     | 1.5 in OPEN TENDON CORRIDOR (x=3.5–10.0)  |
     +----------------------------------------------------------------+
         SERVICE WALL / DARK CLASPS / POWER ENTRY HOLE (FRONT, BOTTOM)
 ```
@@ -632,7 +646,7 @@ RobotProject/
 - [ ] Establish orientation before mounting: the metal-clasp wall with the 1/4 in entry hole is the front Service Edge / Service Wall. The opposite unclasped hinge wall is the back Audience Edge. In every top-down layout, draw the Service Wall at the bottom. Position actors facing the Audience Edge, with backs toward the Service Wall.
 - [ ] Prepare the 13 in × 10 in × 6.5 in pine box: use its lid as the display stage, then unlatch and open it through its full forward swing toward the audience. Preserve clearance along the audience/hinge edge. Use the existing 1/4 in power-entry hole in the lower Service Wall, centered 2 in from the left corner and 1.5 in up from the bottom; route the 14 AWG wires through it with electrical-tape strain relief and chafing protection, not a rubber grommet.
 - [ ] Cut and mount the clear acrylic "T" gantry rigidly to the lower box wall at the metal-clasp service edge, not to the lid. With the figures and temporary PTFE paths in place, unplug 5 V power, leave tendons slack, open the lid fully forward, and confirm the moving figures, tubes, tendons, and service loops do not bind on the fixed gantry, box, table, or audience-side surface.
-- [ ] Complete the tray layout before drilling or mounting hardware. The full-width, 1.5 in bottom tendon corridor and bottom-left power/controller zone are already penciled. Define the Power & Controller Zone as 3.5 in x 3.5 in and allow it to overlap the corridor baseline beside the power-entry hole; from the bottom Service Wall view, mark the terminal block, PCA9685, and ESP32 positions within it. In the remaining upper area above the corridor and outside that zone, mark the 16 MG90S positions and `CH00`–`CH15` labels as a 4 x 4 field. Mark the ESP32 USB-C port facing left toward the outer wall and every brass/white servo output spline uniformly down toward the bottom tendon corridor.
+- [ ] Verify the completed pencil layout before drilling or mounting hardware. The full-width, 1.5 in bottom tendon corridor, 3.5 in x 3.5 in bottom-left Power & Controller Zone, and `CH00`–`CH15` grid are already marked. Confirm the controller-zone bounds are `x=0.0–3.5 in`, `y=0.0–3.5 in`; confirm its lower 1.5 in overlap is excluded from tendon routing. Confirm the 6.5 in x 6.5 in servo field is `x=3.5–10.0 in`, `y=1.5–8.0 in`, divided into sixteen 1.625 in cells in the documented row-major order. Confirm the ESP32 USB-C port faces left toward the outer wall and every brass/white servo output spline faces down toward the bottom tendon corridor.
 - [ ] Mount the bare servos before installing controller hardware. At each marked servo position, make two starter dints and manually drive the two supplied pointy self-tapping wood screws through the plastic side tabs into the MDF; do not pre-drill or use power tools. Do not install any plastic horn or M2 spline screw at this stage. Confirm the tray lifts vertically out through the open top without unplugging individual servo leads and that every lead has a restrained service loop.
 - [ ] Mount the PCA9685, ESP32, and barrel terminal in the marked 3.5 in x 3.5 in power/controller zone. Keep the ESP32 USB-C port facing the left outer wall and retain clearance for the 14 AWG harness, fuse holder, capacitor, and required distribution hardware.
 - [ ] Build the high-current harness: connect the external adapter's barrel terminal to PCA9685 `V+` and `GND` with 14 AWG red/black wire only. Enter through the existing 1/4 in Service Wall hole, keep the electrical-tape protection intact, secure and label polarity at both ends, and keep this harness outside the 1.5 in tendon corridor.
