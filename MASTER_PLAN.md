@@ -384,13 +384,24 @@ Model selection and persona field changes follow the same pattern, targeting `<s
 
 ### Enclosed Stage Architecture
 
-The **13 in x 10 in x 6.5 in unfinished pine box** replaces the unspecified stage base. Its hinged lid is the visible display stage: both figures sit on the lid, and the clear acrylic T gantry is mounted at the rear of the lid to redirect the shoulder tendons. The box base remains a low-voltage service enclosure.
+The **13 in x 10 in x 6.5 in unfinished pine box** replaces the unspecified stage base. Its hinged lid is the visible display stage. To avoid ambiguous use of "front," this build uses two fixed edge names:
 
-The **8 in x 10 in x 1/4 in MDF board** is a single removable internal tray. It carries the 16 MG90S servos, PCA9685, ESP32, barrel-to-screw-terminal block, and cable-management anchors. Arrange the tray so the hinge and front clasp remain clear, every servo horn and tendon spool has unobstructed travel, and the tray can lift out for maintenance without individually unplugging servo leads.
+- **Gantry/service edge** — the lid edge with the metal clasps. Mount the clear acrylic T gantry on this edge. It sits behind the actors from the audience viewpoint and leaves the hinge side free so the lid can open fully.
+- **Audience edge** — the opposite lid edge, without the metal clasps. This is the visible front of the stage; position the actors so they face this edge.
 
-Route tendons from the lid stage to the tray separately from electrical wiring. Leave a restrained service loop at the lid-to-box transition so the lid can open fully and the tray can be removed. Secure slack away from servo horns, tendon spools, PTFE tubing, and the acrylic gantry. Label each tray position, PCA9685 port, servo lead, and matching tendon pair `CH00` through `CH15` using the channel map in Section 3.
+Both figures sit between the two edges, with their backs and PTFE tube exits toward the gantry/service edge. The box base remains a low-voltage service enclosure.
 
-The 5 V / 15 A adapter remains **external**. Only its low-voltage 5 V output enters the box through a secured, strain-relieved cable path near the controller side. Do not install AC mains wiring, an AC inlet, or an internal mains power supply in the wooden enclosure.
+The **8 in x 10 in x 1/4 in MDF board** is a single removable internal tray. It carries the 16 MG90S servos, PCA9685, ESP32, barrel-to-screw-terminal block, and cable-management anchors. Orient the tray so its service edge aligns with the box's gantry/service edge. Reserve three separate tray paths:
+
+- A **tendon corridor** nearest the gantry/service edge for the PTFE tubes and fishing lines descending from the figures and gantry. Do not place power wiring or logic wiring in this corridor.
+- A **power/controller zone** immediately beside the tendon corridor on one side of the tray: barrel terminal, fuse holder, distribution block if required, bulk capacitor, PCA9685, and ESP32. Keep the ESP32 USB connector reachable from the selected side wall.
+- A **servo field** across the remaining tray area: arrange the 16 labeled servos in four rows of four, with every horn and tendon spool facing the tendon corridor and with enough space for each horn to rotate without touching its neighbor.
+
+Keep the hinge side clear of fixed hardware, cable ties, and cable-entry holes. The tray must lift out toward the audience edge for maintenance without individually unplugging servo leads.
+
+Route tendons from the lid stage to the tray through the tendon corridor and route electrical wiring outside it. Leave a restrained service loop at the lid-to-box transition so the lid can open fully and the tray can be removed. Secure slack away from servo horns, tendon spools, PTFE tubing, and the acrylic gantry. Label each tray position, PCA9685 port, servo lead, and matching tendon pair `CH00` through `CH15` using the channel map in Section 3.
+
+The 5 V / 15 A adapter remains **external**. Drill the low-voltage power-entry hole in the lower box wall at the gantry/service edge, on the same side as the power/controller zone and away from the hinge hardware. Place it low enough to clear the lid, high enough to avoid the tray's bottom edge, and far enough from the tendon corridor that the 14 AWG power lead cannot rub PTFE tubes or fishing line. Fit a rubber grommet and strain relief before passing the cable through the hole. Do not install AC mains wiring, an AC inlet, or an internal mains power supply in the wooden enclosure.
 
 ### Bill of Materials (Phase 3 Enclosed Antagonistic Build)
 
@@ -435,7 +446,7 @@ With all 16 MG90S servos under constant antagonistic tension, all channels can s
 - The 15 A supply feeds **only** the PCA9685 V+ rail; the ThinkPad USB port provides logic power to the ESP32 only — no servo current passes through the USB bus.
 - All grounds (ESP32 GND, PCA9685 GND, and adapter GND) are connected at a single shared ground point.
 - The four required Dupont connections are ESP32 `3.3 V -> VCC`, `GND -> GND`, `GPIO 21 -> SDA`, and `GPIO 22 -> SCL` on the PCA9685. Keep this low-current harness physically separate from 14 AWG power wiring and moving tendons.
-- Mini zip ties bundle the 16 servo leads, while cable anchors secure the power and logic harnesses to the MDF tray. Provide a restrained service loop so the tray can be removed and the lid can open without stressing connectors.
+- Mini zip ties bundle the 16 servo leads, while cable anchors secure the power and logic harnesses to the MDF tray. Run the 14 AWG harness directly from the gantry/service-edge entry to the power/controller zone; route the Dupont logic harness along the outside of the servo field; keep both outside the tendon corridor. Provide a restrained service loop so the tray can be removed and the lid can open without stressing connectors.
 - With the external adapter unplugged, inspect all terminals, verify red/black polarity at the PCA9685 rail, confirm continuity between ESP32/PCA9685/adapter negative, and verify there is no `+5 V`-to-ground short. Tug-test the cable entry and tray anchors before applying power.
 - Unplug the external adapter before opening the box, changing wiring, or removing the MDF tray.
 - Add a DC-rated inline fuse at the positive lead near the barrel terminal and a low-ESR bulk capacitor at the servo rail. Select fuse size only after measuring normal and peak current, and use components rated above 5 V and the expected current.
@@ -563,13 +574,14 @@ RobotProject/
 > API mandate enforced at Start Loop. Awaiting hardware.
 
 ### Phase 3 — Physical Build (enclosed, removable 16-servo stage)
-- [ ] Prepare the 13 in × 10 in × 6.5 in pine box: use its lid as the display stage, preserve hinge/clasp clearance, and create a secured low-voltage cable entry on the controller side.
-- [ ] Cut and mount the clear acrylic "T" gantry at the rear of the lid stage. Confirm the lid can open without contacting the gantry, figures, or tendons.
-- [ ] Build the removable 8 in × 10 in × 1/4 in MDF tray. Lay out and label all 16 servo positions, PCA9685 ports, ESP32, barrel terminal, and cable anchors `CH00` through `CH15` before fastening hardware.
+- [ ] Establish orientation before drilling: the metal-clasp edge is the gantry/service edge; the opposite unclasped edge is the audience edge. Position actors facing the audience edge, with backs toward the clasp edge.
+- [ ] Prepare the 13 in × 10 in × 6.5 in pine box: use its lid as the display stage, preserve hinge clearance, and drill a grommeted, strain-relieved low-voltage power-entry hole in the lower box wall at the gantry/service edge, beside the planned power/controller zone and outside the tendon corridor.
+- [ ] Cut and mount the clear acrylic "T" gantry on the metal-clasp edge of the lid, behind the actors from the audience viewpoint. Confirm the lid can open fully without contacting the gantry, figures, or tendons.
+- [ ] Build the removable 8 in × 10 in × 1/4 in MDF tray. Align its service edge with the clasp edge. Reserve a tendon corridor nearest that edge, a separate power/controller zone beside it, and a four-by-four servo field across the remaining area. Lay out and label all 16 servo positions, PCA9685 ports, ESP32, barrel terminal, and cable anchors `CH00` through `CH15` before fastening hardware.
 - [ ] Mount the servos, PCA9685, ESP32, and barrel terminal to the MDF tray. Confirm the tray lifts out without unplugging individual servo leads and that every lead has a restrained service loop.
-- [ ] Build the high-current harness: connect the external adapter's barrel terminal to PCA9685 `V+` and `GND` with 14 AWG red/black wire only. Secure and label polarity at both ends.
-- [ ] Build the logic harness with female-to-female Dupont jumpers only: ESP32 `3.3 V → VCC`, `GND → GND`, `GPIO 21 → SDA`, and `GPIO 22 → SCL` on the PCA9685. Keep these jumpers away from 14 AWG runs and moving mechanisms.
-- [ ] Route and tie down the 16 servo leads along the tray perimeter. Keep all power, logic, servo, and tendon paths clear of servo horns, tendon spools, PTFE tubing, and the lid hinge.
+- [ ] Build the high-current harness: connect the external adapter's barrel terminal to PCA9685 `V+` and `GND` with 14 AWG red/black wire only. Enter at the gantry/service edge, secure and label polarity at both ends, and keep this harness outside the tendon corridor.
+- [ ] Build the logic harness with female-to-female Dupont jumpers only: ESP32 `3.3 V → VCC`, `GND → GND`, `GPIO 21 → SDA`, and `GPIO 22 → SCL` on the PCA9685. Route these jumpers along the outer edge of the servo field, away from 14 AWG runs, the tendon corridor, and moving mechanisms.
+- [ ] Route and tie down the 16 servo leads along the tray perimeter. Keep all power, logic, servo, and tendon paths clear of servo horns, tendon spools, PTFE tubing, the lid hinge, and the power-entry hole.
 - [ ] Anchor PTFE Bowden tubes (1 mm ID × 2 mm OD) to figure backs using heat-melted PVC/ABS channels plus 0.5 mm brass wire or micro zip-ties. Route arm tubes over the gantry as high-angle pulleys.
 - [ ] Install and label the 20 lb braided PE antagonistic tendon pairs between each joint hinge and its opposing servo horns. Set initial tension with the external 5 V adapter unplugged.
 - [ ] Complete the power-off inspection: no `+5 V`-to-ground short, correct rail polarity, shared ground continuity, secured terminals, strain relief, and no wire/tendon interference through the lid and tray range of motion.
