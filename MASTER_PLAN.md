@@ -31,7 +31,7 @@ The two characters engage in real-time, hands-free spoken debates. The text outp
 | Frame type | Highly articulated plastic body with standard joint hinges | Highly articulated plastic body with standard joint hinges |
 | Tendon routing | Antagonistic pull-pull pairs in PTFE Bowden tubes; arm lines redirected up the acrylic gantry | Antagonistic pull-pull pairs in PTFE Bowden tubes; arm lines redirected up the acrylic gantry |
 
-**Key mechanical implication:** Both Black Series figures feature built-in mechanical pivot pins at the neck, shoulders, and torso. Each pivot is now driven by an **antagonistic pair** of tendons tied directly to the plastic joint hinge — one line pulls the joint one way, its partner pulls it back — so no gesture depends on gravity to reset. Every tendon runs inside a low-friction PTFE (Teflon) Bowden tube anchored to the back of the figure via heat-melted channels and 0.5 mm brass wire; arm lines are redirected up the Transparent Acrylic Gantry mounted behind the stage to pull the shoulders up and out, while the remaining lines route down through the display stage base to the 16 servos hidden beneath the deck. See Section 3 for the full antagonistic strategy and channel map.
+**Key mechanical implication:** Both Black Series figures feature built-in mechanical pivot pins at the neck, shoulders, and torso. Each pivot is now driven by an **antagonistic pair** of tendons tied directly to the plastic joint hinge — one line pulls the joint one way, its partner pulls it back — so no gesture depends on gravity to reset. Every tendon runs inside a low-friction PTFE (Teflon) Bowden tube anchored to the back of the figure via heat-melted channels and 0.5 mm brass wire; arm lines are redirected up the Transparent Acrylic Gantry fixed to the service-side box wall behind the closed stage to pull the shoulders up and out, while the remaining lines route down through the display stage base to the 16 servos hidden beneath the deck. See Section 3 for the full antagonistic strategy and channel map.
 
 ---
 
@@ -56,9 +56,9 @@ To eliminate the friction losses that would otherwise fight the antagonistic ten
 
 Pulling the arms *upward and outward* is impossible from below the stage without a redirection point. A **Transparent Acrylic Gantry** provides one, mounted invisibly behind the figures:
 
-- A 1/8" (3 mm) clear cast-acrylic board cut into a "T" shape stands behind the two figures
+- A 1/8" (3 mm) clear cast-acrylic board cut into a "T" shape is fixed to the lower box wall at the service side, behind the two figures when the lid is closed
 - Because it is optically clear, it disappears against the backdrop under stage lighting
-- The PTFE Bowden tubes route up the gantry and over its top edge, which acts as a **high-angle pulley**
+- The PTFE Bowden tubes route from the moving lid stage to the fixed gantry and over its top edge, which acts as a **high-angle pulley**
 - Servos hidden beneath the stage can now pull a figure's arm up and out along a high tendon angle, producing lifelike shoulder raises and reaching gestures that a straight bottom pull could never achieve
 
 ### Channel Assignment — 16-Channel Max-Out
@@ -386,10 +386,10 @@ Model selection and persona field changes follow the same pattern, targeting `<s
 
 The **13 in x 10 in x 6.5 in unfinished pine box** replaces the unspecified stage base. Its hinged lid is the visible display stage. To avoid ambiguous use of "front," this build uses two fixed edge names:
 
-- **Gantry/service edge** — the lid edge with the metal clasps. Mount the clear acrylic T gantry on this edge. It sits behind the actors from the audience viewpoint and leaves the hinge side free so the lid can open fully.
-- **Audience edge** — the opposite lid edge, without the metal clasps. This is the visible front of the stage; position the actors so they face this edge.
+- **Gantry/service edge** — the lid edge with the metal clasps and the matching lower-box wall behind it. Fix the clear acrylic T gantry to this lower-box wall, not to the lid. It sits behind the actors from the audience viewpoint when the lid is closed.
+- **Audience/hinge edge** — the opposite lid edge, without the metal clasps. This is the visible front of the stage and the hinge edge; position the actors so they face this edge.
 
-Both figures sit between the two edges, with their backs and PTFE tube exits toward the gantry/service edge. The box base remains a low-voltage service enclosure.
+When the clasps are unlatched, the lid pivots forward toward the audience around the audience/hinge edge. The gantry remains fixed on the service-side lower box wall. Both figures sit between the two edges, with their backs and PTFE tube exits toward the gantry/service edge. The box base remains a low-voltage service enclosure.
 
 The **8 in x 10 in x 1/4 in MDF board** is a single removable internal tray. It carries the 16 MG90S servos, PCA9685, ESP32, barrel-to-screw-terminal block, and cable-management anchors. Orient the tray so its service edge aligns with the box's gantry/service edge. Reserve three separate tray paths:
 
@@ -397,11 +397,11 @@ The **8 in x 10 in x 1/4 in MDF board** is a single removable internal tray. It 
 - A **power/controller zone** immediately beside the tendon corridor on one side of the tray: barrel terminal, fuse holder, distribution block if required, bulk capacitor, PCA9685, and ESP32. Keep the ESP32 USB connector reachable from the selected side wall.
 - A **servo field** across the remaining tray area: arrange the 16 labeled servos in four rows of four, with every horn and tendon spool facing the tendon corridor and with enough space for each horn to rotate without touching its neighbor.
 
-Keep the hinge side clear of fixed hardware, cable ties, and cable-entry holes. The tray must lift out toward the audience edge for maintenance without individually unplugging servo leads.
+Keep the audience/hinge edge clear of fixed hardware, cable ties, and cable-entry holes. The fixed gantry and moving lid require a deliberate service-motion check: with the 5 V adapter unplugged and tendons initially slack, open the lid through its full forward swing and confirm the figures, tube exits, PTFE tubes, and service loops do not bind on the fixed gantry, box, table, or audience-side surface. Do not open the lid with tensioned tendons until this slack-path check has passed. Lift the tray vertically out through the open top without individually unplugging servo leads; do not depend on an audience-edge removal path because the open lid occupies that side.
 
 Route tendons from the lid stage to the tray through the tendon corridor and route electrical wiring outside it. Leave a restrained service loop at the lid-to-box transition so the lid can open fully and the tray can be removed. Secure slack away from servo horns, tendon spools, PTFE tubing, and the acrylic gantry. Label each tray position, PCA9685 port, servo lead, and matching tendon pair `CH00` through `CH15` using the channel map in Section 3.
 
-The 5 V / 15 A adapter remains **external**. Drill the low-voltage power-entry hole in the lower box wall at the gantry/service edge, on the same side as the power/controller zone and away from the hinge hardware. Place it low enough to clear the lid, high enough to avoid the tray's bottom edge, and far enough from the tendon corridor that the 14 AWG power lead cannot rub PTFE tubes or fishing line. Fit a rubber grommet and strain relief before passing the cable through the hole. Do not install AC mains wiring, an AC inlet, or an internal mains power supply in the wooden enclosure.
+The 5 V / 15 A adapter remains **external**. Drill the low-voltage power-entry hole in the lower box wall at the gantry/service edge, on the same side as the power/controller zone and opposite the audience/hinge edge. Place it low enough to clear the forward-swinging lid, high enough to avoid the tray's bottom edge, and far enough from the tendon corridor that the 14 AWG power lead cannot rub PTFE tubes or fishing line. Fit a rubber grommet and strain relief before passing the cable through the hole. Do not install AC mains wiring, an AC inlet, or an internal mains power supply in the wooden enclosure.
 
 ### Bill of Materials (Phase 3 Enclosed Antagonistic Build)
 
@@ -574,11 +574,11 @@ RobotProject/
 > API mandate enforced at Start Loop. Awaiting hardware.
 
 ### Phase 3 — Physical Build (enclosed, removable 16-servo stage)
-- [ ] Establish orientation before drilling: the metal-clasp edge is the gantry/service edge; the opposite unclasped edge is the audience edge. Position actors facing the audience edge, with backs toward the clasp edge.
-- [ ] Prepare the 13 in × 10 in × 6.5 in pine box: use its lid as the display stage, preserve hinge clearance, and drill a grommeted, strain-relieved low-voltage power-entry hole in the lower box wall at the gantry/service edge, beside the planned power/controller zone and outside the tendon corridor.
-- [ ] Cut and mount the clear acrylic "T" gantry on the metal-clasp edge of the lid, behind the actors from the audience viewpoint. Confirm the lid can open fully without contacting the gantry, figures, or tendons.
+- [ ] Establish orientation before drilling: the metal-clasp edge is the gantry/service edge; the opposite unclasped edge is the audience/hinge edge. Position actors facing the audience/hinge edge, with backs toward the clasp edge.
+- [ ] Prepare the 13 in × 10 in × 6.5 in pine box: use its lid as the display stage, then unlatch and open it through its full forward swing toward the audience. Preserve clearance along the audience/hinge edge and drill a grommeted, strain-relieved low-voltage power-entry hole in the lower box wall at the gantry/service edge, beside the planned power/controller zone and outside the tendon corridor.
+- [ ] Cut and mount the clear acrylic "T" gantry rigidly to the lower box wall at the metal-clasp service edge, not to the lid. With the figures and temporary PTFE paths in place, unplug 5 V power, leave tendons slack, open the lid fully forward, and confirm the moving figures, tubes, tendons, and service loops do not bind on the fixed gantry, box, table, or audience-side surface.
 - [ ] Build the removable 8 in × 10 in × 1/4 in MDF tray. Align its service edge with the clasp edge. Reserve a tendon corridor nearest that edge, a separate power/controller zone beside it, and a four-by-four servo field across the remaining area. Lay out and label all 16 servo positions, PCA9685 ports, ESP32, barrel terminal, and cable anchors `CH00` through `CH15` before fastening hardware.
-- [ ] Mount the servos, PCA9685, ESP32, and barrel terminal to the MDF tray. Confirm the tray lifts out without unplugging individual servo leads and that every lead has a restrained service loop.
+- [ ] Mount the servos, PCA9685, ESP32, and barrel terminal to the MDF tray. Confirm the tray lifts vertically out through the open top without unplugging individual servo leads and that every lead has a restrained service loop.
 - [ ] Build the high-current harness: connect the external adapter's barrel terminal to PCA9685 `V+` and `GND` with 14 AWG red/black wire only. Enter at the gantry/service edge, secure and label polarity at both ends, and keep this harness outside the tendon corridor.
 - [ ] Build the logic harness with female-to-female Dupont jumpers only: ESP32 `3.3 V → VCC`, `GND → GND`, `GPIO 21 → SDA`, and `GPIO 22 → SCL` on the PCA9685. Route these jumpers along the outer edge of the servo field, away from 14 AWG runs, the tendon corridor, and moving mechanisms.
 - [ ] Route and tie down the 16 servo leads along the tray perimeter. Keep all power, logic, servo, and tendon paths clear of servo horns, tendon spools, PTFE tubing, the lid hinge, and the power-entry hole.

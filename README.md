@@ -20,9 +20,9 @@ The background playgrounds each handle a specific job. `/play/persona` receives 
 
 ## The Hardware: 16-Motor Movement System (v5.4.0)
 
-Each figure is moved by eight small metal-gear motors, for a total of 16. The display stage is the lid of a 13 x 10 x 6.5 inch pine box. The lid edge with the metal clasps is the gantry/service edge; the opposite unclasped edge is the audience-facing front. An 8 x 10 x 1/4 inch MDF tray inside the box holds the motors, ESP32, PCA9685 motor board, terminal block, and secured wiring so the complete mechanism can be removed for service.
+Each figure is moved by eight small metal-gear motors, for a total of 16. The display stage is the lid of a 13 x 10 x 6.5 inch pine box. The lid edge with the metal clasps is the gantry/service edge; the opposite unclasped edge is the audience-facing hinge edge. When unlatched, the lid pivots forward toward the audience around that hinge edge. An 8 x 10 x 1/4 inch MDF tray inside the box holds the motors, ESP32, PCA9685 motor board, terminal block, and secured wiring so the complete mechanism can be removed for service.
 
-The 5 V / 15 A adapter remains external; only low-voltage DC enters through a grommeted, strain-relieved hole in the lower box wall at the gantry/service edge. Red/black 14 AWG wire carries the high-current 5 V rail to the PCA9685, while female-to-female Dupont jumpers carry only the ESP32-to-PCA9685 logic and I2C signals. The tray keeps power/controller hardware, wiring, and the tendon corridor physically separate so the lid can open and the tray can lift out without stressing connectors or crossing moving tendons.
+The 5 V / 15 A adapter remains external; only low-voltage DC enters through a grommeted, strain-relieved hole in the lower box wall at the gantry/service edge, opposite the hinge. Red/black 14 AWG wire carries the high-current 5 V rail to the PCA9685, while female-to-female Dupont jumpers carry only the ESP32-to-PCA9685 logic and I2C signals. The tray keeps power/controller hardware, wiring, and the tendon corridor physically separate so the lid can swing forward and the tray can lift vertically out without stressing connectors or crossing moving tendons.
 
 Before sustained motor operation, add a DC-rated inline fuse and holder at the positive supply entry, a low-ESR bulk capacitor at the servo rail, and a rated distribution block if the exact PCA9685 board cannot safely carry the measured load through its terminal and PCB traces. These protection parts are required additions; the 14 AWG wire alone does not rate the controller board for 15 A.
 
@@ -30,7 +30,7 @@ Before sustained motor operation, add a DC-rated inline fuse and holder at the p
 
 **Hidden control lines.** Strong fishing line connects the motors to the figures. The line runs through thin, low-friction tubes attached to the back of each figure. These tubes guide the line and keep it from catching as the characters move.
 
-**Raising the arms.** A clear T-shaped support is mounted on the metal-clasp edge of the lid, behind the actors from the audience-facing unclasped edge. This leaves the hinge side free for full lid opening while guiding shoulder lines from above. Motors in the removable tray lift the arms naturally, and the clear support is designed to disappear under stage lighting.
+**Raising the arms.** A clear T-shaped support is fixed to the lower box wall at the metal-clasp service edge, behind the actors from the audience-facing hinge edge when the lid is closed. It does not travel with the lid. Before using tensioned tendons, unplug 5 V power and open the lid fully to confirm that the moving stage, PTFE tubes, and service loops do not bind on the fixed support. Motors in the removable tray lift the arms naturally, and the clear support is designed to disappear under stage lighting.
 
 **Smooth and reliable movement.** Large movements are divided into many small steps to reduce sudden strain on the gears. The controller also checks each incoming instruction and ignores damaged or incomplete commands rather than moving a motor unexpectedly.
 
