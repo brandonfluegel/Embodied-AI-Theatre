@@ -370,7 +370,7 @@ Model selection and persona field changes follow the same pattern, targeting `<s
 | Removable tray | 8 in x 10 in x 1/4 in MDF board | Serviceable internal mounting panel for the 16 servos, controller boards, terminal block, and cable anchors |
 | Microcontroller | ESP32 Type-C development board | Receives serial commands, drives PCA9685 via I2C |
 | PWM driver | PCA9685 16-channel board | Converts I2C commands to 50 Hz PWM signals for all 16 channels |
-| Servos (×16) | MG90S micro servo, metal gear | Antagonistic actuation — 8 channels per character |
+| Servos (×16) | MG90S micro servo, metal/brass gear, 3-pin harness | Antagonistic actuation — one servo on each PCA9685 channel `CH00` through `CH15` |
 | Servo power supply | 5 V / 15 A (75 W) switching adapter | Dedicated high-current rail for 16 servos under antagonistic tension |
 | Power connector | Female barrel-to-screw-terminal block | Breaks the adapter barrel jack out to the PCA9685 V+ rail |
 | Power harness | 30 ft 14 AWG stranded red/black two-conductor wire | High-current 5 V and ground distribution from the barrel terminal to PCA9685 V+ and GND |
@@ -381,6 +381,39 @@ Model selection and persona field changes follow the same pattern, targeting `<s
 | Tube anchoring | 0.5 mm brass wire + micro zip-ties | Physically anchor PTFE Bowden tubes through heat-melted channels in the figures' PVC/ABS plastic |
 | Cable management | Mini zip ties | Bundles the 16 servo leads and tendon runs |
 | Host computer | Lenovo ThinkPad | Runs relay.py, browser userscripts, and HTML dashboard |
+
+### Phase 3 MG90S Actuator Specification
+
+The actuator set is **16 MG90S metal/brass-geared micro servos**, assigned one per PCA9685 channel, `CH00` through `CH15`. Each servo has a three-pin lead:
+
+| Harness conductor | Function | PCA9685 servo header connection |
+|---|---|---|
+| Brown | Ground | `GND` |
+| Red | 5 V servo power | `V+` |
+| Orange | PWM control signal | Channel signal pin |
+
+> **Polarity note:** Verify the silkscreen on the specific PCA9685 board before connecting any servo. Do not assume header orientation from board position alone; an inverted servo plug can damage the servo or controller.
+
+Each MG90S package supplies the following hardware for its servo. For the full 16-servo set, this yields 32 wood screws, 16 spline machine screws, and 16 of each horn style.
+
+| Package item per servo | Quantity | Phase 3 disposition |
+|---|---:|---|
+| Pointy self-tapping wood screw | 2 | Use both screws to fasten the servo's plastic side tabs directly to the MDF tray. Make starter dints, then drive the screws manually; do not pre-drill or use power tools for this operation. |
+| Flat-top M2 spline machine screw | 1 | Reserve until electrical centering. Use it only to secure the selected horn to the brass output spline. |
+| Double-arm straight horn | 1 | **Required.** Install after centering and use as the attachment point for the 20 lb braided PE fishing-line tendon. |
+| Single-arm horn | 1 | Spare/reserved; do not install for the Phase 3 tendon layout. |
+| Four-point cross horn | 1 | Spare/reserved; do not install for the Phase 3 tendon layout. |
+
+> **Horn timing rule:** Mount every servo bare. Do not attach a plastic horn or its M2 spline screw during tray mounting. Horns are fitted only after the electrical-centering procedure in Phase 3 Step 5, then the mandated double-arm horn is secured with its M2 screw before a tendon is attached.
+
+### Phase 3 Servo Assembly Procedure
+
+1. Confirm the tray's 1.5 in tendon corridor and 3.5 in x 3.5 in power/controller zone are marked. Mark the remaining 4 x 4 servo grid and its `CH00`–`CH15` channel labels before making any mounting dints.
+2. Set every servo into its labeled grid position with its brass/white output spline uniformly up toward the Service Edge tendon corridor. Confirm that the future double-arm horns have clearance from each other and from the controller zone.
+3. At each servo's two plastic side tabs, make starter dints in the MDF. Do not pre-drill the tray.
+4. Manually drive the two supplied pointy self-tapping wood screws through the side tabs into the starter dints. Do not use power tools. Leave every servo bare: no horn and no M2 spline screw.
+5. Connect and electrically center one labeled channel at a time using the conservative commissioning range. With the servo at its verified center, fit the required double-arm straight horn in the intended tendon-neutral orientation and secure it with the supplied flat-top M2 machine screw.
+6. Attach and label the 20 lb braided PE tendon only after the centered double-arm horn is secured. Retain the single-arm and four-point cross horns as spares.
 
 ### Enclosed Stage Architecture
 
@@ -394,8 +427,8 @@ When the clasps are unlatched, the lid pivots forward toward the audience around
 The **8 in x 10 in x 1/4 in MDF board** will sit flat inside the box as a single removable internal tray for the 16 MG90S servos, PCA9685, ESP32, barrel-to-screw-terminal block, and cable-management anchors. **Current build status:** only the tendon corridor and power/controller zone have been penciled onto the board. The 16 servo positions, `CH00`–`CH15` labels, and all component mounting positions remain unmarked and no components are mounted. View the tray from the Service Edge / Service Wall when using the directional references below. Reserve these finalized areas:
 
 - A **1.5 in-wide tendon corridor** running horizontally along the Service Edge / clasp side of the tray. It carries the PTFE tubes and fishing lines descending from the figures and fixed gantry. Do not place power wiring or logic wiring in this corridor.
-- A **power/controller zone** in the bottom-left corner of the tray: barrel terminal, fuse holder, distribution block if required, bulk capacitor, PCA9685, and ESP32. This zone sits directly beside the left-side power-entry hole. Mount the ESP32 with its USB-C port facing left toward the outer box wall.
-- A **servo field** across the remaining tray area above and to the right of the power/controller zone. Mount all 16 labeled MG90S servos as a 4 x 4 grid, `CH00` through `CH15`, with every output spline facing the tendon corridor and with enough space for each horn to rotate without touching its neighbor.
+- A **3.5 in x 3.5 in power/controller zone** in the bottom-left corner of the tray: barrel terminal, fuse holder, distribution block if required, bulk capacitor, PCA9685, and ESP32. This zone sits directly beside the left-side power-entry hole. Mount the ESP32 with its USB-C port facing left toward the outer box wall.
+- A **servo field** across the remaining tray area outside the 3.5 in x 3.5 in power/controller zone and the 1.5 in tendon corridor. Mark and mount all 16 MG90S servos as a 4 x 4 grid, `CH00` through `CH15`. Every brass/white output spline must point uniformly up toward the 1.5 in tendon corridor along the Service Edge / clasp side, with enough space for each double-arm horn to rotate without touching its neighbor.
 
 Keep the audience/hinge edge clear of fixed hardware, cable ties, and cable-entry holes. The fixed gantry and moving lid require a deliberate service-motion check: with the 5 V adapter unplugged and tendons initially slack, open the lid through its full forward swing and confirm the figures, tube exits, PTFE tubes, and service loops do not bind on the fixed gantry, box, table, or audience-side surface. Do not open the lid with tensioned tendons until this slack-path check has passed. Lift the tray vertically out through the open top without individually unplugging servo leads; do not depend on an audience-edge removal path because the open lid occupies that side.
 
@@ -577,13 +610,14 @@ RobotProject/
 - [ ] Establish orientation before mounting: the metal-clasp wall is the Service Edge / Service Wall; the opposite unclasped edge is the audience/hinge edge. Position actors facing the audience/hinge edge, with backs toward the Service Wall.
 - [ ] Prepare the 13 in × 10 in × 6.5 in pine box: use its lid as the display stage, then unlatch and open it through its full forward swing toward the audience. Preserve clearance along the audience/hinge edge. Use the existing 1/4 in power-entry hole in the lower Service Wall, centered 2 in from the left corner and 1.5 in up from the bottom; route the 14 AWG wires through it with electrical-tape strain relief and chafing protection, not a rubber grommet.
 - [ ] Cut and mount the clear acrylic "T" gantry rigidly to the lower box wall at the metal-clasp service edge, not to the lid. With the figures and temporary PTFE paths in place, unplug 5 V power, leave tendons slack, open the lid fully forward, and confirm the moving figures, tubes, tendons, and service loops do not bind on the fixed gantry, box, table, or audience-side surface.
-- [ ] Complete the tray layout before drilling or mounting hardware. The 1.5 in-wide horizontal tendon corridor and bottom-left power/controller zone are already penciled. From the Service Wall view, mark the terminal block, PCA9685, and ESP32 positions in that controller zone, then mark the 16 MG90S positions and `CH00`–`CH15` labels as a 4 x 4 field above and to the right. Mark the ESP32 USB-C port facing left toward the outer wall and every servo output spline facing the tendon corridor.
-- [ ] Mount the servos, PCA9685, ESP32, and barrel terminal to the MDF tray. Confirm the tray lifts vertically out through the open top without unplugging individual servo leads and that every lead has a restrained service loop.
+- [ ] Complete the tray layout before drilling or mounting hardware. The 1.5 in-wide horizontal tendon corridor and bottom-left power/controller zone are already penciled. Define the power/controller zone as 3.5 in x 3.5 in; from the Service Wall view, mark the terminal block, PCA9685, and ESP32 positions within it. In the remaining area outside that zone and the tendon corridor, mark the 16 MG90S positions and `CH00`–`CH15` labels as a 4 x 4 field. Mark the ESP32 USB-C port facing left toward the outer wall and every brass/white servo output spline uniformly up toward the tendon corridor.
+- [ ] Mount the bare servos before installing controller hardware. At each marked servo position, make two starter dints and manually drive the two supplied pointy self-tapping wood screws through the plastic side tabs into the MDF; do not pre-drill or use power tools. Do not install any plastic horn or M2 spline screw at this stage. Confirm the tray lifts vertically out through the open top without unplugging individual servo leads and that every lead has a restrained service loop.
+- [ ] Mount the PCA9685, ESP32, and barrel terminal in the marked 3.5 in x 3.5 in power/controller zone. Keep the ESP32 USB-C port facing the left outer wall and retain clearance for the 14 AWG harness, fuse holder, capacitor, and required distribution hardware.
 - [ ] Build the high-current harness: connect the external adapter's barrel terminal to PCA9685 `V+` and `GND` with 14 AWG red/black wire only. Enter through the existing 1/4 in Service Wall hole, keep the electrical-tape protection intact, secure and label polarity at both ends, and keep this harness outside the 1.5 in tendon corridor.
 - [ ] Build the logic harness with female-to-female Dupont jumpers only: ESP32 `3.3 V → VCC`, `GND → GND`, `GPIO 21 → SDA`, and `GPIO 22 → SCL` on the PCA9685. Route these jumpers along the outer edge of the servo field, away from 14 AWG runs, the tendon corridor, and moving mechanisms.
 - [ ] Route and tie down the 16 servo leads along the tray perimeter. Keep all power, logic, servo, and tendon paths clear of servo horns, tendon spools, PTFE tubing, the lid hinge, and the power-entry hole.
 - [ ] Anchor PTFE Bowden tubes (1 mm ID × 2 mm OD) to figure backs using heat-melted PVC/ABS channels plus 0.5 mm brass wire or micro zip-ties. Route arm tubes over the gantry as high-angle pulleys.
-- [ ] Install and label the 20 lb braided PE antagonistic tendon pairs between each joint hinge and its opposing servo horns. Set initial tension with the external 5 V adapter unplugged.
+- [ ] Electrically center one labeled servo at a time using the conservative commissioning range. Once its centered position and clear travel are verified, install its mandated double-arm straight horn on the brass spline with the supplied flat-top M2 machine screw. Then install and label the 20 lb braided PE antagonistic tendon pairs between each joint hinge and its opposing double-arm horn. Keep the single-arm and four-point cross horns as spares, and set initial tendon tension with the external 5 V adapter unplugged.
 - [ ] Complete the power-off inspection: no `+5 V`-to-ground short, correct rail polarity, shared ground continuity, secured terminals, strain relief, and no wire/tendon interference through the lid and tray range of motion.
 - [ ] Connect the external 5 V adapter and verify one conservatively limited channel at a time before any all-channel command. Confirm label, direction, clearance, and absence of connector heating for `CH00` through `CH15`.
 
