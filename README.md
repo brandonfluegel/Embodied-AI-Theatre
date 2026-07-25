@@ -18,7 +18,7 @@ The background playgrounds each handle a specific job. `/play/persona` receives 
 
 ---
 
-## The Hardware: 16-Motor Movement System (v5.3.0)
+## The Hardware: 16-Motor Movement System (v5.4.0)
 
 Each figure is moved by eight small metal-gear motors, for a total of 16. The display stage is the lid of a 13 x 10 x 6.5 inch pine box. An 8 x 10 x 1/4 inch MDF tray inside the box holds the motors, ESP32, PCA9685 motor board, terminal block, and secured wiring so the complete mechanism can be removed for service.
 

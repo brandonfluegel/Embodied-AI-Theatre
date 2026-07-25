@@ -86,7 +86,7 @@ The PCA9685's full 16 channels are now used: **Darth Vader occupies channels 0�
 
 Each pair is driven complementarily: to nod Vader's head down, ch 0 winds in while ch 1 pays out; to lift it back, the roles reverse. The same pattern applies to all four joints on both characters, giving each figure absolute positional control across head, torso, shoulder, and elbow.
 
-> **Software integration note (v5.3.0):** The browser animation layer (`vader_trooper.user.js`) drives the antagonistic pairs via `sendJoint(pair, angle)`, which looks up a per-joint `CALIBRATION_CURVES` piecewise spline to derive the physically correct `pullA` and `pullB` servo angles independently. Browser trajectory damping ramps changes larger than 20° in 1°/15 ms steps. The firmware independently enforces per-channel soft limits and a 1500 ms PWM-release timeout. Repeated identical commands no longer postpone that release, while a command received after release re-energizes the channel. Boot homing energizes one antagonistic pair at a time to reduce inrush, the PCA9685 I²C bus runs at 400 kHz, and malformed, overflowed, or incomplete serial frames are discarded before motion.
+> **Software integration note (v5.4.0):** The browser animation layer (`vader_trooper.user.js`) drives the antagonistic pairs via `sendJoint(pair, angle)`, which looks up a per-joint `CALIBRATION_CURVES` piecewise spline to derive the physically correct `pullA` and `pullB` servo angles independently. Browser trajectory damping ramps changes larger than 20° in 1°/15 ms steps. The firmware independently enforces per-channel soft limits and a 1500 ms PWM-release timeout. Repeated identical commands no longer postpone that release, while a command received after release re-energizes the channel. Boot homing energizes one antagonistic pair at a time to reduce inrush, the PCA9685 I²C bus runs at 400 kHz, and malformed, overflowed, or incomplete serial frames are discarded before motion.
 
 ---
 
@@ -161,7 +161,7 @@ The moment `utterance.onend` fires, `clearInterval` terminates the head loop ins
     ↓  detectSentiment(completedText) → updateSentimentDisplay()
     ↓  syncPersonaField('NAME', …) + injectPersonaModifier() → /play/persona backstory
     ↓
-    ↓  ── v5.3.0: Dynamic Tone Dial Profiling ──────────────────────────────────────
+    ↓  ── v5.4.0: Dynamic Tone Dial Profiling ──────────────────────────────────────
     ↓  During the inter-turn silence, the system actively overwrites the 6 live
     ↓  dialValues entries to match the upcoming speaker's personality profile:
     ↓    • Vader next   → ENERGY=85, VERBOSITY=75, WARMTH=20
@@ -172,7 +172,7 @@ The moment `utterance.onend` fires, `clearInterval` terminates the head loop ins
     ↓  the native slider on /play/tone and via sendJoint() to the physical servos,
     ↓  so the figures shift posture during silence rather than mid-speech.
     ↓
-    ↓  ── v5.3.0: Rolling Dialogue History Construction ─────────────────────────
+    ↓  ── v5.4.0: Rolling Dialogue History Construction ─────────────────────────
     ↓  Shape's tone playground is single-turn, so the script reads sessionLog
     ↓  and slices the last 20 turn objects. Each entry is mapped to a labelled
     ↓  line using a character script format:
@@ -191,7 +191,7 @@ The moment `utterance.onend` fires, `clearInterval` terminates the head loop ins
 [loop repeats indefinitely]
 ```
 
-> **v5.3.0 — Execution Seeding:** Clicking **♾️ Start Loop** captures the main-page prompt as the persistent scene premise. If it is empty or shorter than 5 characters, the script uses a default Death Star security-failure premise. The first request explicitly names Darth Vader as the next speaker, preventing the generated opening response from being assigned to the wrong character.
+> **v5.4.0 — Execution Seeding:** Clicking **♾️ Start Loop** captures the main-page prompt as the persistent scene premise. If it is empty or shorter than 5 characters, the script uses a default Death Star security-failure premise. The first request explicitly names Darth Vader as the next speaker, preventing the generated opening response from being assigned to the wrong character.
 >
 > Local conversation state advances even when `relay.py` or the ESP32 is offline; telemetry transmission is optional and no longer controls whether a turn enters `sessionLog`.
 
@@ -479,7 +479,7 @@ RobotProject/
 ├── .gitignore
 │
 ├── browser/
-│   └── vader_trooper.user.js           ← v5.3.0 unified matrix userscript
+│   └── vader_trooper.user.js           ← v5.4.0 unified matrix userscript
 │
 ├── server/
 │   ├── relay.py                        ← Python WebSocket server + serial relay
@@ -503,7 +503,7 @@ RobotProject/
 
 ## 10. Development Checklist
 
-> **Status as of 2026-07-17 — v5.3.0. The userscript supplies the conversation state missing from Shape's single-turn tone playground. Every request carries the scene premise, up to 20 labelled turns, and an explicit next speaker. Generation is request-bound and completes on Shape's `Done` state, with a 2.5-second compatibility fallback. The loop can therefore complete at least ten turns per character before its context window rolls forward. Local history remains active when the hardware relay is offline. Awaiting physical hardware build (Phase 3).**
+> **Status as of 2026-07-24 — v5.4.0. The userscript supplies the conversation state missing from Shape's single-turn tone playground. Every request carries the scene premise, up to 20 labelled turns, and an explicit next speaker. Generation is request-bound and completes on Shape's `Done` state, with a 2.5-second compatibility fallback. The loop can therefore complete at least ten turns per character before its context window rolls forward. Local history remains active when the hardware relay is offline. Awaiting physical hardware build (Phase 3).**
 > Digital stack complete with five active dynamic behaviour layers.
 > Both figures animate independently per speaker. Temperature drives physical noise between turns. Dialogue
 > sentiment automatically modulates the /play/persona backstory. The eval iframe feeds a closed-loop score
@@ -555,7 +555,7 @@ RobotProject/
 - [x] Rolling dialogue history construction — `scheduleHandoff()` builds each single-turn Shape request from the persistent scene premise, `sessionLog.slice(-20)`, labelled dialogue lines, and an explicit `[NEXT SPEAKER]` marker; the first request explicitly assigns Darth Vader
 - [x] Execution seeding on loop start — the `vt-loop-start` listener inspects the main-page `textarea` before firing the first generate click; if the field is empty or < 5 characters, `setReactValue()` injects a Death Star security-failure scenario seed to ensure deterministic, context-rich generation on turn 1; pre-typed operator scenarios (≥ 5 characters) are left untouched
 
-> **All software tooling for Phases 3 and 4 is complete (v5.3.0, 2026-07-17).** The loop carries a 20-turn history, binds every request to its speaker, advances without relay connectivity, and waits for Shape's explicit completion state. Dynamic tone dial profiling applies per-character presets during inter-turn silence. Serial checksum integrity is enforced end-to-end (`S<ch>:<angle>*<hex>` format). Browser `sessionLog` remains capped at 50 turns. `sendJoint()` trajectory damping protects gear stacks on all delta > 20° transitions. The firmware has
+> **All software tooling for Phases 3 and 4 is complete (v5.4.0, 2026-07-24).** The loop carries a 20-turn history, binds every request to its speaker, advances without relay connectivity, and waits for Shape's explicit completion state. Dynamic tone dial profiling applies per-character presets during inter-turn silence. Serial checksum integrity is enforced end-to-end (`S<ch>:<angle>*<hex>` format). Browser `sessionLog` remains capped at 50 turns. `sendJoint()` trajectory damping protects gear stacks on all delta > 20° transitions. The firmware has
 > per-servo soft limits, echoes `ACK:S<ch>:<angle>` after each command, and cuts PWM after 1500 ms
 > of static hold. `relay.py` has a full sweep, single-channel test, and live serial-ACK reader. The
 > HUD CALIBRATION panel has per-channel slider, ▶ Test CH, ↓ Set Min, ↑ Set Max, and Sweep All.

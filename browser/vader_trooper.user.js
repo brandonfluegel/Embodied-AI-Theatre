@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vader & Trooper Master Control Matrix
 // @namespace    robotproject.local
-// @version      5.3.0
+// @version      5.4.0
 // @description  Floating HUD + same-origin hidden iframe matrix for full shape-models.com pipeline control from /play/tone
 // @author       RobotProject
 // @match        https://www.shape-models.com/play/tone
@@ -26,7 +26,7 @@
      animation intervals, causing stuttering in the physical syllable sync.
   6. The purple HUD panel will appear on the right side of the page.
 
-    WHAT'S NEW IN v5.3.0
+    WHAT'S NEW IN v5.4.0
   ---------------------
     - Maintains the last 20 turns in every request, supporting at least ten turns per
         character even though Shape's tone playground is natively single-turn.

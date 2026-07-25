@@ -1,5 +1,5 @@
 /*
-    esp32_servo_controller.ino  —  v5.3.0
+    esp32_servo_controller.ino  —  v5.4.0
   --------------------------
   Receives servo commands over USB Serial and drives 16 MG90S servos
   through an Adafruit PCA9685 board in a full antagonistic (pull-pull) layout.
@@ -16,7 +16,7 @@
   Examples:  S0:90*03   S8:90*0B   S12:135*0E
   Frames without '*' or with a checksum mismatch are silently discarded.
 
-    v5.3.0 continuous-operation safeguards:
+    v5.4.0 continuous-operation safeguards:
             - Repeated identical commands do not refresh the 1500 ms thermal timer.
             - Released servos re-energise when the next valid command arrives.
             - Antagonistic pairs home in staggered groups to reduce startup inrush.
